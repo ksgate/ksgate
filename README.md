@@ -1,10 +1,11 @@
-# kdex-gateman
+# KDex Gate Manager
+
 KDex Gate Manager (a.k.a. gateman) is a Kubernetes controller that manages the lifecycle of pods that are gated from being scheduled.
 
 ## Description
 Welcome to the future! Avoid wasting resources scheduling pods that are not ready to run due to missing dependencies.
 
-With gateman you can simply declare your dependencies using a [PodSchedulingGate](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-scheduling-gate-v1/) and annotation describing the dependency. Then, let gateman manage the rest.
+With gateman you can easily declare your dependencies using a [PodSchedulingGate](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-scheduling-gate-v1/) plus an annotation that describes a condition on a resource. Then, let gateman take care of the rest.
 
 Here's a quick example:
 
@@ -45,17 +46,17 @@ This pod will not be scheduled until the `database` deployment has at least 1 up
 
 ### Why?
 
-Kubernetes does not have a built-in ordering mechanism for pods that need to be scheduled in a specific order.
+Kubernetes does not have a built-in dependency/ordering mechanism for pods that need to be scheduled in a specific order or based on the availability of a resource.
 
-One common workaround is to use init containers that wait for the necessary depedencies to be ready. Another is simply to keep trying (and failing) until the dependency is ready. None of these approaches are ideal as they add overhead to the pod's lifecycle, waste resources and/or suffer from limitations with respect to probe thresholds and timeouts.
+One common workaround is to use init containers that wait for the necessary depedencies to be ready. Another is simply to keep trying (and failing) until the dependency is ready. None of these approaches are ideal as they add overhead to the pod's lifecycle, waste resources or suffer from limitations with respect to probe thresholds and timeouts which require manual recovery and complex (and delicate) tuning.
 
 Luckily, with the arrival of Kubernetes 1.30 and [Pod Scheduling Readiness](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) the better way to achieve this is to gate the scheduling of a pod using a [PodSchedulingGate](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-scheduling-gate-v1/).
 
-Furthermore, gated scheduling is essentially cost free with no time limit. Resources may safely remain gated indefinitely and gates are meant to be descriptive enough to make it clear why a pod is not scheduled.
+Furthermore, gated scheduling is essentially resource free with __no__ time limits. Resources may safely remain gated indefinitely. Gates are also meant to be descriptive enough to make it clear why a pod is not scheduled when used.
 
 However, this approach requires an external actor to understand the meaning of the gate and to remove the gate once the pod can be scheduled.
 
-This is where gateman comes in.
+This is where gateman comes in. It automates the process of evaluating conditions and removing gates.
 
 ## Documentation
 
