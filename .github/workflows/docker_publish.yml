@@ -43,6 +43,8 @@ jobs:
           [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
           # This uses the Docker `latest` tag convention.
           [ "$VERSION" == "main" ] && VERSION=latest
+
+          echo GITHUB_REF=${{ github.ref }}
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
           export IMG=$IMAGE_ID:$VERSION
