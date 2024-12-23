@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  annotations:
+    gateman.kdex.dev/one: '{"kind": "service", "group": "core", "name": "nginx", "namespace": "default"}'
+    gateman.kdex.dev/two: '{"kind": "service", "group": "core", "name": "nginx", "namespace": "default"}'
+spec:
+  schedulingGates:
+  - name: gateman.kdex.dev/one
+  - name: gateman.kdex.dev/two
+  containers:
+  - name: nginx
+    image: nginx
+
+
+# kubectl patch pod nginx -p '[{"op": "remove", "path": "/spec/schedulingGates/*", "value": "gateman.kdex.dev/one"}]'
