@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -148,38 +149,108 @@ func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, 
 
 // Example condition evaluators
 func (r *PodController) evaluateResourceExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
+	// Check if resource exists
+	_, err := r.resourceLookup(ctx, condition)
+
+	return err == nil, err
+}
+
+func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
+	// Check if resource exists
+	obj, err := r.resourceLookup(ctx, condition)
+
+	if err != nil {
+		return false, err
+	}
+
+	// Implementation for checking if a label exists on a resource
+	return obj.GetLabels()[condition["key"].(string)] == condition["value"].(string), err
+}
+
+func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}) (bool, error) {
+	// Check if resource exists
+	obj, err := r.resourceLookup(ctx, condition)
+
+	if err != nil {
+		return false, err
+	}
+
+	// Get the expression from the condition
+	expr, ok := condition["expression"].(string)
+	if !ok {
+		return false, fmt.Errorf("expression not specified")
+	}
+
+	// Convert unstructured to JSON
+	jsonBytes, err := obj.MarshalJSON()
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal object to JSON: %v", err)
+	}
+
+	// Parse JSON into generic map for CEL evaluation
+	var data map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return false, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+
+	// Create CEL environment and program
+	env, err := cel.NewEnv(cel.Variable("object", cel.AnyType))
+	if err != nil {
+		return false, fmt.Errorf("failed to create CEL environment: %v", err)
+	}
+
+	ast, iss := env.Compile(expr)
+	if iss.Err() != nil {
+		return false, fmt.Errorf("failed to compile expression: %v", iss.Err())
+	}
+
+	prg, err := env.Program(ast)
+	if err != nil {
+		return false, fmt.Errorf("failed to create program: %v", err)
+	}
+
+	// Evaluate expression
+	out, _, err := prg.Eval(map[string]interface{}{
+		"object": data,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to evaluate expression: %v", err)
+	}
+
+	// Convert result to bool
+	result, ok := out.Value().(bool)
+	if !ok {
+		return false, fmt.Errorf("expression did not evaluate to boolean")
+	}
+	return result, nil
+}
+
+func (r *PodController) resourceLookup(ctx context.Context, condition map[string]interface{}) (*unstructured.Unstructured, error) {
 	// Extract required fields
+	// Create an unstructured object to query the resource
 	apiVersion, ok1 := condition["apiVersion"].(string)
 	kind, ok2 := condition["kind"].(string)
 	name, ok3 := condition["name"].(string)
 	namespace, ok4 := condition["namespace"].(string)
 
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return false, fmt.Errorf("missing required fields for resourceExists condition")
+		return nil, fmt.Errorf("missing required fields for resourceLookup")
 	}
 
-	// Create an unstructured object to query the resource
 	obj := &unstructured.Unstructured{}
 	obj.SetAPIVersion(apiVersion)
 	obj.SetKind(kind)
 
-	// Check if resource exists
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}, obj)
 
-	return err == nil, nil
-}
+	if err == nil {
+		return obj, nil
+	}
 
-func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
-	// Implementation for checking if a label exists on a resource
-	return false, nil
-}
-
-func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}) (bool, error) {
-	// Implementation for evaluating CEL expressions
-	return false, nil
+	return nil, err
 }
 
 // SetupWithManager sets up the controller with the Manager
