@@ -141,22 +141,11 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 }
 
 func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
-	// Get the condition type
-	conditionType, ok := condition["type"].(string)
-	if !ok {
-		return false, fmt.Errorf("condition type not specified")
-	}
-
-	switch conditionType {
-	case "resourceExists":
+	expression := condition["expression"]
+	if expression == nil {
 		return r.evaluateResourceExists(ctx, condition)
-	case "labelExists":
-		return r.evaluateLabelExists(ctx, condition)
-	case "expression":
-		return r.evaluateExpression(ctx, condition, pod)
-	default:
-		return false, fmt.Errorf("unknown condition type: %s", conditionType)
 	}
+	return r.evaluateExpression(ctx, condition, pod)
 }
 
 // Example condition evaluators
@@ -169,36 +158,6 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, condition ma
 	}
 
 	return err == nil, err
-}
-
-func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
-	// Check if resource exists
-	resource, err := r.resourceLookup(ctx, condition)
-
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-
-		if err.Error() == "missing required fields for resourceLookup" {
-			return false, err
-		}
-		return false, nil
-	}
-
-	// Extract and validate key and value from condition
-	key, ok := condition["label"].(string)
-	if !ok {
-		return false, fmt.Errorf("label key not specified or not a string")
-	}
-
-	value, ok := condition["value"].(string)
-	if !ok {
-		return false, fmt.Errorf("label value not specified or not a string")
-	}
-
-	// Implementation for checking if a label exists on a resource
-	return resource.GetLabels()[key] == value, nil
 }
 
 func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}, pod *corev1.Pod) (bool, error) {

@@ -131,7 +131,6 @@ func TestPodController_Reconcile(t *testing.T) {
 					Namespace: "default",
 					Annotations: map[string]string{
 						"gateman.kdex.dev/test-gate": `{
-							"type":"resourceExists",
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -161,7 +160,6 @@ func TestPodController_Reconcile(t *testing.T) {
 					Namespace: "default",
 					Annotations: map[string]string{
 						"gateman.kdex.dev/test-gate": `{
-							"type":"resourceExists",
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -190,7 +188,6 @@ func TestPodController_Reconcile(t *testing.T) {
 					Namespace: "default",
 					Annotations: map[string]string{
 						"gateman.kdex.dev/test-gate": `{
-							"type":"resourceExists",
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -295,173 +292,35 @@ func TestEvaluateCondition(t *testing.T) {
 		expectedResult bool
 		expectedError  bool
 	}{
-		// {
-		// 	name:           "missing type field",
-		// 	condition:      map[string]interface{}{},
-		// 	expectedResult: false,
-		// 	expectedError:  true,
-		// },
-		// {
-		// 	name: "unknown condition type",
-		// 	condition: map[string]interface{}{
-		// 		"type": "unknown",
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  true,
-		// },
-		// {
-		// 	name: "resourceExists - missing required fields",
-		// 	condition: map[string]interface{}{
-		// 		"type": "resourceExists",
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  true,
-		// },
-		// {
-		// 	name: "resourceExists - valid fields",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "resourceExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test",
-		// 		"namespace":  "default",
-		// 	},
-		// 	objects: []runtime.Object{
-		// 		&corev1.ConfigMap{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name:      "test",
-		// 				Namespace: "default",
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedResult: true,
-		// 	expectedError:  false,
-		// },
-		// {
-		// 	name: "labelExists - missing required fields",
-		// 	condition: map[string]interface{}{
-		// 		"type": "labelExists",
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  true,
-		// },
-		// {
-		// 	name: "labelExists - resource not found",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "labelExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test-cm",
-		// 		"namespace":  "default",
-		// 		"label":      "my-label",
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  false,
-		// },
-		// {
-		// 	name: "labelExists - label not present",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "labelExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test-cm",
-		// 		"namespace":  "default",
-		// 		"label":      "my-label",
-		// 		"value":      "any-value",
-		// 	},
-		// 	objects: []runtime.Object{
-		// 		&corev1.ConfigMap{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name:      "test-cm",
-		// 				Namespace: "default",
-		// 				Labels: map[string]string{
-		// 					"other-label": "value",
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  false,
-		// },
-		// {
-		// 	name: "labelExists - label present",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "labelExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test-cm",
-		// 		"namespace":  "default",
-		// 		"label":      "my-label",
-		// 		"value":      "any-value",
-		// 	},
-		// 	objects: []runtime.Object{
-		// 		&corev1.ConfigMap{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name:      "test-cm",
-		// 				Namespace: "default",
-		// 				Labels: map[string]string{
-		// 					"my-label": "any-value",
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedResult: true,
-		// 	expectedError:  false,
-		// },
-		// {
-		// 	name: "labelExists - label present with specific value match",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "labelExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test-cm",
-		// 		"namespace":  "default",
-		// 		"label":      "my-label",
-		// 		"value":      "expected-value",
-		// 	},
-		// 	objects: []runtime.Object{
-		// 		&corev1.ConfigMap{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name:      "test-cm",
-		// 				Namespace: "default",
-		// 				Labels: map[string]string{
-		// 					"my-label": "expected-value",
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedResult: true,
-		// 	expectedError:  false,
-		// },
-		// {
-		// 	name: "labelExists - label present but value mismatch",
-		// 	condition: map[string]interface{}{
-		// 		"type":       "labelExists",
-		// 		"apiVersion": "v1",
-		// 		"kind":       "ConfigMap",
-		// 		"name":       "test-cm",
-		// 		"namespace":  "default",
-		// 		"label":      "my-label",
-		// 		"value":      "expected-value",
-		// 	},
-		// 	objects: []runtime.Object{
-		// 		&corev1.ConfigMap{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name:      "test-cm",
-		// 				Namespace: "default",
-		// 				Labels: map[string]string{
-		// 					"my-label": "different-value",
-		// 				},
-		// 			},
-		// 		},
-		// 	},
-		// 	expectedResult: false,
-		// 	expectedError:  false,
-		// },
+		{
+			name:           "resourceExists - missing required fields",
+			condition:      map[string]interface{}{},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "resourceExists - valid fields",
+			condition: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test",
+				"namespace":  "default",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
 		{
 			name: "expression - missing required fields",
 			condition: map[string]interface{}{
-				"type": "expression",
+				"expression": "this is not a valid expression",
 			},
 			expectedResult: false,
 			expectedError:  true,
@@ -469,7 +328,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - invalid expression",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -490,7 +348,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - simple true condition",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -511,7 +368,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - simple false condition",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -532,7 +388,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - complex boolean expression (true)",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -553,7 +408,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - complex boolean expression (false)",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -574,7 +428,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - with pod variables",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -595,7 +448,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - with pod variables (false case)",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -616,7 +468,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - with complex pod variable access",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
@@ -637,7 +488,6 @@ func TestEvaluateCondition(t *testing.T) {
 		{
 			name: "expression - with target resource fields",
 			condition: map[string]interface{}{
-				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",

@@ -331,14 +331,12 @@ var _ = Describe("Manager", Ordered, func() {
 					Namespace: testNamespace,
 					Annotations: map[string]string{
 						"gateman.kdex.dev/one": fmt.Sprintf(`{
-							"type": "resourceExists",
 							"apiVersion": "v1",
 							"kind": "Service",
 							"name": "test-svc",
 							"namespace": "%s"
 						}`, testNamespace),
 						"gateman.kdex.dev/two": fmt.Sprintf(`{
-							"type": "resourceExists",
 							"apiVersion": "v1",
 							"kind": "ConfigMap",
 							"name": "test-cm",
