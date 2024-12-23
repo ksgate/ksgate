@@ -57,8 +57,22 @@ However, this approach requires an external actor to understand the meaning of t
 
 This is where gateman comes in.
 
-## Getting Started
-...
+## Documentation
+
+### Gates
+Gates must be prefixed with `gateman.kdex.dev/` to be recognized by gateman. The suffix is used to identify individual gates and is arbitrary.
+
+### Annotations
+An annotation by the same name is used to hold the condition which is JSON Object that conforms to the [condition schema](condition.schema.json).
+
+### Expressions
+Expressions (when present) are [CEL expressions](#cel) that must evaluate to `true`. The absence of an expression is interpreted as a simple existence check on the resource.
+
+### Variables
+The CEL environment contains two variables: `resource` and `pod`. `resource` gives access to the resource being evaluated and `pod` gives access to the pod that is being scheduled. Any complex logic over these variables can be expressed using CEL. `resource` and `pod` are the complete JSON representation of the resource and pod respectively.
+
+#### CEL (Common Expression Language)
+CEL expressions are a powerful feature that allow for complex filtering and validation. For more information, see the [CEL documentation](https://kubernetes.io/docs/reference/using-api/cel/).
 
 ## License
 
