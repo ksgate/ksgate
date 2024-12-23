@@ -47,32 +47,32 @@ jobs:
         run: |
           go mod tidy
 
-      # - name: Run Linter
-      #   uses: golangci/golangci-lint-action@v6
-      #   with:
-      #     version: v1.61
+      - name: Run Linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.61
 
-      # - name: Run Unit Tests
-      #   run: |
-      #     make test
+      - name: Run Unit Tests
+        run: |
+          make test
 
-      # - name: Install the latest version of kind
-      #   run: |
-      #     curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
-      #     chmod +x ./kind
-      #     sudo mv ./kind /usr/local/bin/kind
+      - name: Install the latest version of kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
 
-      # - name: Verify kind installation
-      #   run: |
-      #     kind version
+      - name: Verify kind installation
+        run: |
+          kind version
 
-      # - name: Create kind cluster
-      #   run: |
-      #     kind create cluster
+      - name: Create kind cluster
+        run: |
+          kind create cluster
 
-      # - name: Running E2E Tests
-      #   run: |
-      #     make test-e2e
+      - name: Running E2E Tests
+        run: |
+          make test-e2e
 
       - name: Log in to registry
         if: ${{ (github.repository == 'kdex-tech/kdex-gateman') && startsWith(github.ref, 'refs/tags/') && (github.event_name != 'pull_request') }}
