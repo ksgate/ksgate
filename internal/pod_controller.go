@@ -160,11 +160,25 @@ func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[s
 	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
-		return false, err
+		if err.Error() == "missing required fields for resourceLookup" {
+			return false, err
+		}
+		return false, nil
+	}
+
+	// Extract and validate key and value from condition
+	key, ok := condition["label"].(string)
+	if !ok {
+		return false, fmt.Errorf("label key not specified or not a string")
+	}
+
+	value, ok := condition["value"].(string)
+	if !ok {
+		return false, fmt.Errorf("label value not specified or not a string")
 	}
 
 	// Implementation for checking if a label exists on a resource
-	return resource.GetLabels()[condition["key"].(string)] == condition["value"].(string), err
+	return resource.GetLabels()[key] == value, nil
 }
 
 func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}, pod *corev1.Pod) (bool, error) {

@@ -337,6 +337,127 @@ func TestEvaluateCondition(t *testing.T) {
 			expectedResult: true,
 			expectedError:  false,
 		},
+		{
+			name: "labelExists - missing required fields",
+			condition: map[string]interface{}{
+				"type": "labelExists",
+			},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "labelExists - resource not found",
+			condition: map[string]interface{}{
+				"type":       "labelExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"label":      "my-label",
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "labelExists - label not present",
+			condition: map[string]interface{}{
+				"type":       "labelExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"label":      "my-label",
+				"value":      "any-value",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+						Labels: map[string]string{
+							"other-label": "value",
+						},
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "labelExists - label present",
+			condition: map[string]interface{}{
+				"type":       "labelExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"label":      "my-label",
+				"value":      "any-value",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+						Labels: map[string]string{
+							"my-label": "any-value",
+						},
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name: "labelExists - label present with specific value match",
+			condition: map[string]interface{}{
+				"type":       "labelExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"label":      "my-label",
+				"value":      "expected-value",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+						Labels: map[string]string{
+							"my-label": "expected-value",
+						},
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name: "labelExists - label present but value mismatch",
+			condition: map[string]interface{}{
+				"type":       "labelExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"label":      "my-label",
+				"value":      "expected-value",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+						Labels: map[string]string{
+							"my-label": "different-value",
+						},
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
 	}
 
 	for _, tt := range tests {
