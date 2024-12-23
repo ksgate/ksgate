@@ -7,7 +7,7 @@ name: Push to GitHub Packages
 # - A pull request is created or updated
 on:
   workflow_run:
-    workflows: ["Tests", "E2E Tests", "Lint"]
+    workflows: ["E2E Tests"]
     branches: [main]
     types:
       - completed

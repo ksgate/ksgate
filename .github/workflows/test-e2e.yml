@@ -3,6 +3,11 @@ name: E2E Tests
 on:
   push:
   pull_request:
+  workflow_run:
+    workflows: ["Tests"]
+    branches: [main]
+    types:
+      - completed
 
 jobs:
   test-e2e:
