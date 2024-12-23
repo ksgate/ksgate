@@ -25,7 +25,10 @@ jobs:
       contents: read
       #
     steps:
-      - uses: actions/checkout@v4
+      - name: Clone the code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
