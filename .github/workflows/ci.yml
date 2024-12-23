@@ -9,6 +9,8 @@ on:
     - '!docs/**'
     - '!.github/**'
     - '.github/**/*ci*'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+(-.+)?'
   pull_request:
     paths:
     - '**'
@@ -68,17 +70,17 @@ jobs:
         run: |
           kind create cluster
 
-      - name: Running Test e2e
+      - name: Running E2E Tests
         run: |
           make test-e2e
 
       - name: Log in to registry
-        if: ${{ (github.repository == 'kdex-tech/kdex-gateman') && (github.ref == 'refs/heads/main') && (github.event_name != 'pull_request') }}
+        if: ${{ (github.repository == 'kdex-tech/kdex-gateman') && (github.ref == 'refs/tags/v*') && (github.event_name != 'pull_request') }}
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Push image
-        if: ${{ (github.repository == 'kdex-tech/kdex-gateman') && (github.ref == 'refs/heads/main') && (github.event_name != 'pull_request') }}
+        if: ${{ (github.repository == 'kdex-tech/kdex-gateman') && (github.ref == 'refs/tags/v*') && (github.event_name != 'pull_request') }}
         run: |
           IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
 
