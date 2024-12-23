@@ -63,7 +63,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("Processing pod scheduling gates",
+	logger.Info("Processing gateman.kdex.dev pod scheduling gates",
 		"pod", req.NamespacedName,
 		"gates", ourGates)
 
@@ -107,8 +107,8 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 	annotationKey := gate.Name
 	condition, exists := pod.Annotations[annotationKey]
 	if !exists {
-		logger.Info("No annotation found for gate", "gate", gate.Name)
-		return false, nil
+		logger.Error(nil, "No condition annotation found for gate", "gate", gate.Name)
+		return false, fmt.Errorf("missing gate condition annotation: %v", gate.Name)
 	}
 
 	// Parse the JSON condition

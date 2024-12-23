@@ -24,6 +24,7 @@ func TestPodController_Reconcile(t *testing.T) {
 		existingPod   *corev1.Pod
 		expectedError bool
 		expectedGates []corev1.PodSchedulingGate
+		addResource   bool
 	}{
 		{
 			name:          "pod not found",
@@ -129,7 +130,13 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{"type":"resourceExists","apiVersion":"v1","kind":"ConfigMap","name":"test","namespace":"default"}`,
+						"gateman.kdex.dev/test-gate": `{
+							"type":"resourceExists",
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"namespace":"default"
+						}`,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -146,6 +153,69 @@ func TestPodController_Reconcile(t *testing.T) {
 				{Name: "gateman.kdex.dev/test-gate"},
 			},
 		},
+		{
+			name: "pod with matching gate and valid condition that evaluates to true",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"type":"resourceExists",
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"namespace":"default"
+						}`,
+					},
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "gateman.kdex.dev/test-gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: nil,
+			addResource:   true,
+		},
+		{
+			name: "pod with multiple gates - only remove matching gate when condition is true",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"type":"resourceExists",
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"namespace":"default"
+						}`,
+					},
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "other.domain/gate"},
+						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "another.domain/gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "other.domain/gate"},
+				{Name: "another.domain/gate"},
+			},
+			addResource: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -156,6 +226,16 @@ func TestPodController_Reconcile(t *testing.T) {
 			// Only add the pod if it exists
 			if tt.existingPod != nil {
 				builder = builder.WithObjects(tt.existingPod)
+			}
+
+			// Add ConfigMap for tests that need it
+			if tt.addResource {
+				builder = builder.WithObjects(&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				})
 			}
 
 			// Build the client
