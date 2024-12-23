@@ -20,3 +20,9 @@ rules:
   - pods/status
   verbs:
   - get
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get

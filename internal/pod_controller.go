@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,7 @@ type PodController struct {
 	Scheme *runtime.Scheme
 }
 
+// +kubebuilder:rbac:groups="*",resources=*,verbs=get
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=pods/status,verbs=get
 
@@ -102,7 +104,11 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		logger.Info("Updated pod scheduling gates", "pod", req.NamespacedName)
 	}
 
-	return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	if (len(ourGates) - len(removedGates)) > 0 {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // evaluateGate determines if a gate should be removed
@@ -158,6 +164,10 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, condition ma
 	// Check if resource exists
 	_, err := r.resourceLookup(ctx, condition)
 
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+
 	return err == nil, err
 }
 
@@ -166,6 +176,10 @@ func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[s
 	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
 		if err.Error() == "missing required fields for resourceLookup" {
 			return false, err
 		}
@@ -192,6 +206,10 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
 		if err.Error() == "missing required fields for resourceLookup" {
 			return false, err
 		}
@@ -298,7 +316,7 @@ func (r *PodController) resourceLookup(ctx context.Context, condition map[string
 // SetupWithManager sets up the controller with the Manager
 func (r *PodController) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("gateman.kdex.dev").
+		Named("gateman").
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.podToRequests),
@@ -308,17 +326,22 @@ func (r *PodController) SetupWithManager(mgr ctrl.Manager) error {
 
 // podToRequests maps a Pod to reconciliation requests
 func (r *PodController) podToRequests(ctx context.Context, obj client.Object) []reconcile.Request {
-	logger := log.FromContext(ctx)
-
 	pod := obj.(*corev1.Pod)
 
 	// Skip if pod is not in SchedulingGated state
-	if pod.Status.Phase != "SchedulingGated" {
+	if pod.Status.Phase != "Pending" {
 		return nil
 	}
 
+	isSchedulingGated := false
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == "PodScheduled" && condition.Reason == "SchedulingGated" {
+			isSchedulingGated = true
+		}
+	}
+
 	// Skip if pod has no scheduling gates
-	if len(pod.Spec.SchedulingGates) == 0 {
+	if !isSchedulingGated {
 		return nil
 	}
 
@@ -334,8 +357,6 @@ func (r *PodController) podToRequests(ctx context.Context, obj client.Object) []
 	if !hasOurGate {
 		return nil
 	}
-
-	logger.Info("IS THIS working...", "pod", pod.Name, "gates", pod.Spec.SchedulingGates)
 
 	return []reconcile.Request{
 		{
