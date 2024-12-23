@@ -96,5 +96,5 @@ jobs:
           echo GITHUB_REF=${{ github.ref }}
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
-          export IMG=$IMAGE_ID:$VERSION
+          export IMG=$IMAGE_ID:$VERSION IMG_NAME=$IMAGE_ID IMG_VERSION=$VERSION
           make docker-buildx
