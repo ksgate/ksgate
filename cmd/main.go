@@ -23,7 +23,7 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"github.com/kdex-tech/kdex-gateman/controllers"
+	"github.com/kdex-tech/kdex-gateman/internal"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -139,7 +139,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PodController{
+	if err = (&internal.PodController{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
