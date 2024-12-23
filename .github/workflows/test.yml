@@ -3,7 +3,6 @@ name: Tests
 on:
   workflow_run:
     workflows: ["Lint"]
-    branches: [main]
     types:
       - completed
 

@@ -3,7 +3,6 @@ name: E2E Tests
 on:
   workflow_run:
     workflows: ["Tests"]
-    branches: [main]
     types:
       - completed
 

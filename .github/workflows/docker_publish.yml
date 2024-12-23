@@ -8,7 +8,6 @@ name: Push to GitHub Packages
 on:
   workflow_run:
     workflows: ["E2E Tests"]
-    branches: [main]
     types:
       - completed
 
