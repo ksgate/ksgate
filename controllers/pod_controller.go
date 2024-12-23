@@ -141,7 +141,7 @@ func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, 
 	case "labelExists":
 		return r.evaluateLabelExists(ctx, condition)
 	case "expression":
-		return r.evaluateExpression(ctx, condition)
+		return r.evaluateExpression(ctx, condition, pod)
 	default:
 		return false, fmt.Errorf("unknown condition type: %s", conditionType)
 	}
@@ -157,19 +157,19 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, condition ma
 
 func (r *PodController) evaluateLabelExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
 	// Check if resource exists
-	obj, err := r.resourceLookup(ctx, condition)
+	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
 		return false, err
 	}
 
 	// Implementation for checking if a label exists on a resource
-	return obj.GetLabels()[condition["key"].(string)] == condition["value"].(string), err
+	return resource.GetLabels()[condition["key"].(string)] == condition["value"].(string), err
 }
 
-func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}) (bool, error) {
+func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}, pod *corev1.Pod) (bool, error) {
 	// Check if resource exists
-	obj, err := r.resourceLookup(ctx, condition)
+	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
 		return false, err
@@ -181,20 +181,31 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 		return false, fmt.Errorf("expression not specified")
 	}
 
-	// Convert unstructured to JSON
-	jsonBytes, err := obj.MarshalJSON()
+	// Convert pod to JSON
+	podJSON, err := json.Marshal(pod)
 	if err != nil {
-		return false, fmt.Errorf("failed to marshal object to JSON: %v", err)
+		return false, fmt.Errorf("failed to marshal pod: %v", err)
+	}
+	var podData map[string]interface{}
+	if err := json.Unmarshal(podJSON, &podData); err != nil {
+		return false, fmt.Errorf("failed to unmarshal pod: %v", err)
 	}
 
-	// Parse JSON into generic map for CEL evaluation
-	var data map[string]interface{}
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
-		return false, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	// Convert unstructured to JSON
+	resourceJSON, err := resource.MarshalJSON()
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal resource: %v", err)
+	}
+	var resourceData map[string]interface{}
+	if err := json.Unmarshal(resourceJSON, &resourceData); err != nil {
+		return false, fmt.Errorf("failed to unmarshal resource: %v", err)
 	}
 
 	// Create CEL environment and program
-	env, err := cel.NewEnv(cel.Variable("object", cel.AnyType))
+	env, err := cel.NewEnv(
+		cel.Variable("resource", cel.DynType),
+		cel.Variable("pod", cel.DynType),
+	)
 	if err != nil {
 		return false, fmt.Errorf("failed to create CEL environment: %v", err)
 	}
@@ -209,9 +220,10 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 		return false, fmt.Errorf("failed to create program: %v", err)
 	}
 
-	// Evaluate expression
+	// Evaluate expression with both object and pod
 	out, _, err := prg.Eval(map[string]interface{}{
-		"object": data,
+		"resource": resourceData,
+		"pod":      podData,
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to evaluate expression: %v", err)
