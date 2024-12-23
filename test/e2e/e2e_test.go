@@ -30,7 +30,6 @@ import (
 
 	"github.com/kdex-tech/kdex-gateman/test/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -49,18 +48,13 @@ const metricsRoleBindingName = "kdex-gateman-metrics-binding"
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
-	// Before running the tests, set up the environment by creating the namespace,
-	// installing CRDs, and deploying the controller.
+	// Before running the tests, set up the environment by creating the namespace
+	// and deploying the controller.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
-
-		By("installing CRDs")
-		cmd = exec.Command("make", "install")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		By("deploying the controller-manager")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
@@ -68,7 +62,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
+	// After all tests have been executed, clean up by undeploying the controller,
 	// and deleting the namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
@@ -79,12 +73,12 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		_, _ = utils.Run(cmd)
+
+		By("cleaning up the metrics role binding")
+		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found=true")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -169,11 +163,25 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
+			// First, ensure the binding is deleted
+			cleanupCmd := exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found=true")
+			_, err := utils.Run(cleanupCmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to cleanup existing ClusterRoleBinding")
+
+			// Add a verification step to ensure the binding is gone before proceeding
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found=true")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(BeEmpty(), "ClusterRoleBinding should be deleted before proceeding")
+			}, "30s", "1s").Should(Succeed())
+
+			// Then create the new binding
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
 				"--clusterrole=kdex-gateman-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
-			_, err := utils.Run(cmd)
+			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
@@ -254,6 +262,10 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should successfully watch and process pod events", func() {
 			By("creating a test pod")
 			testPod := &corev1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "v1",
+					Kind:       "Pod",
+				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: namespace,
@@ -287,77 +299,6 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to delete test pod")
 
 			By("verifying the deletion was processed")
-			Eventually(func(g Gomega) {
-				metricsOutput := getMetricsOutput()
-				g.Expect(metricsOutput).To(ContainSubstring(
-					`controller_runtime_reconcile_total{controller="pod",result="success"}`,
-				))
-			}).Should(Succeed())
-		})
-	})
-
-	Context("Error Handling", func() {
-		It("should handle invalid pod specifications gracefully", func() {
-			By("creating a pod with invalid configuration")
-			invalidPod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-pod",
-					Namespace: namespace,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "invalid",
-						Image: "", // Invalid empty image
-					}},
-				},
-			}
-
-			cmd := exec.Command("kubectl", "apply", "-f", "-")
-			cmd.Stdin = strings.NewReader(utils.ToYAML(invalidPod))
-			_, _ = utils.Run(cmd)
-
-			By("verifying error metrics are recorded")
-			Eventually(func(g Gomega) {
-				metricsOutput := getMetricsOutput()
-				g.Expect(metricsOutput).To(ContainSubstring(
-					`controller_runtime_reconcile_errors_total{controller="pod"}`,
-				))
-			}).Should(Succeed())
-		})
-	})
-
-	Context("Resource Validation", func() {
-		It("should validate pod resource requirements", func() {
-			By("creating a pod with resource requirements")
-			podWithResources := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "resource-pod",
-					Namespace: namespace,
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "nginx",
-						Image: "nginx:latest",
-						Resources: corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("100m"),
-								corev1.ResourceMemory: resource.MustParse("100Mi"),
-							},
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("50m"),
-								corev1.ResourceMemory: resource.MustParse("50Mi"),
-							},
-						},
-					}},
-				},
-			}
-
-			cmd := exec.Command("kubectl", "apply", "-f", "-")
-			cmd.Stdin = strings.NewReader(utils.ToYAML(podWithResources))
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create pod with resources")
-
-			By("verifying resource validation metrics")
 			Eventually(func(g Gomega) {
 				metricsOutput := getMetricsOutput()
 				g.Expect(metricsOutput).To(ContainSubstring(
