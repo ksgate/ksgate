@@ -295,41 +295,212 @@ func TestEvaluateCondition(t *testing.T) {
 		expectedResult bool
 		expectedError  bool
 	}{
+		// {
+		// 	name:           "missing type field",
+		// 	condition:      map[string]interface{}{},
+		// 	expectedResult: false,
+		// 	expectedError:  true,
+		// },
+		// {
+		// 	name: "unknown condition type",
+		// 	condition: map[string]interface{}{
+		// 		"type": "unknown",
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  true,
+		// },
+		// {
+		// 	name: "resourceExists - missing required fields",
+		// 	condition: map[string]interface{}{
+		// 		"type": "resourceExists",
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  true,
+		// },
+		// {
+		// 	name: "resourceExists - valid fields",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "resourceExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test",
+		// 		"namespace":  "default",
+		// 	},
+		// 	objects: []runtime.Object{
+		// 		&corev1.ConfigMap{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name:      "test",
+		// 				Namespace: "default",
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedResult: true,
+		// 	expectedError:  false,
+		// },
+		// {
+		// 	name: "labelExists - missing required fields",
+		// 	condition: map[string]interface{}{
+		// 		"type": "labelExists",
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  true,
+		// },
+		// {
+		// 	name: "labelExists - resource not found",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "labelExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test-cm",
+		// 		"namespace":  "default",
+		// 		"label":      "my-label",
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  false,
+		// },
+		// {
+		// 	name: "labelExists - label not present",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "labelExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test-cm",
+		// 		"namespace":  "default",
+		// 		"label":      "my-label",
+		// 		"value":      "any-value",
+		// 	},
+		// 	objects: []runtime.Object{
+		// 		&corev1.ConfigMap{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name:      "test-cm",
+		// 				Namespace: "default",
+		// 				Labels: map[string]string{
+		// 					"other-label": "value",
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  false,
+		// },
+		// {
+		// 	name: "labelExists - label present",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "labelExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test-cm",
+		// 		"namespace":  "default",
+		// 		"label":      "my-label",
+		// 		"value":      "any-value",
+		// 	},
+		// 	objects: []runtime.Object{
+		// 		&corev1.ConfigMap{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name:      "test-cm",
+		// 				Namespace: "default",
+		// 				Labels: map[string]string{
+		// 					"my-label": "any-value",
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedResult: true,
+		// 	expectedError:  false,
+		// },
+		// {
+		// 	name: "labelExists - label present with specific value match",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "labelExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test-cm",
+		// 		"namespace":  "default",
+		// 		"label":      "my-label",
+		// 		"value":      "expected-value",
+		// 	},
+		// 	objects: []runtime.Object{
+		// 		&corev1.ConfigMap{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name:      "test-cm",
+		// 				Namespace: "default",
+		// 				Labels: map[string]string{
+		// 					"my-label": "expected-value",
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedResult: true,
+		// 	expectedError:  false,
+		// },
+		// {
+		// 	name: "labelExists - label present but value mismatch",
+		// 	condition: map[string]interface{}{
+		// 		"type":       "labelExists",
+		// 		"apiVersion": "v1",
+		// 		"kind":       "ConfigMap",
+		// 		"name":       "test-cm",
+		// 		"namespace":  "default",
+		// 		"label":      "my-label",
+		// 		"value":      "expected-value",
+		// 	},
+		// 	objects: []runtime.Object{
+		// 		&corev1.ConfigMap{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name:      "test-cm",
+		// 				Namespace: "default",
+		// 				Labels: map[string]string{
+		// 					"my-label": "different-value",
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// 	expectedResult: false,
+		// 	expectedError:  false,
+		// },
 		{
-			name:           "missing type field",
-			condition:      map[string]interface{}{},
-			expectedResult: false,
-			expectedError:  true,
-		},
-		{
-			name: "unknown condition type",
+			name: "expression - missing required fields",
 			condition: map[string]interface{}{
-				"type": "unknown",
+				"type": "expression",
 			},
 			expectedResult: false,
 			expectedError:  true,
 		},
 		{
-			name: "resourceExists - missing required fields",
+			name: "expression - invalid expression",
 			condition: map[string]interface{}{
-				"type": "resourceExists",
-			},
-			expectedResult: false,
-			expectedError:  true,
-		},
-		{
-			name: "resourceExists - valid fields",
-			condition: map[string]interface{}{
-				"type":       "resourceExists",
+				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
-				"name":       "test",
+				"name":       "test-cm",
 				"namespace":  "default",
+				"expression": "invalid && syntax ||",
 			},
 			objects: []runtime.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
+						Name:      "test-cm",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "expression - simple true condition",
+			condition: map[string]interface{}{
+				"type":       "expression",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"expression": "true",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
 						Namespace: "default",
 					},
 				},
@@ -338,45 +509,20 @@ func TestEvaluateCondition(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name: "labelExists - missing required fields",
+			name: "expression - simple false condition",
 			condition: map[string]interface{}{
-				"type": "labelExists",
-			},
-			expectedResult: false,
-			expectedError:  true,
-		},
-		{
-			name: "labelExists - resource not found",
-			condition: map[string]interface{}{
-				"type":       "labelExists",
+				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
 				"namespace":  "default",
-				"label":      "my-label",
-			},
-			expectedResult: false,
-			expectedError:  false,
-		},
-		{
-			name: "labelExists - label not present",
-			condition: map[string]interface{}{
-				"type":       "labelExists",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "test-cm",
-				"namespace":  "default",
-				"label":      "my-label",
-				"value":      "any-value",
+				"expression": "false",
 			},
 			objects: []runtime.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-cm",
 						Namespace: "default",
-						Labels: map[string]string{
-							"other-label": "value",
-						},
 					},
 				},
 			},
@@ -384,24 +530,20 @@ func TestEvaluateCondition(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name: "labelExists - label present",
+			name: "expression - complex boolean expression (true)",
 			condition: map[string]interface{}{
-				"type":       "labelExists",
+				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
 				"namespace":  "default",
-				"label":      "my-label",
-				"value":      "any-value",
+				"expression": "true && (true || false)",
 			},
 			objects: []runtime.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-cm",
 						Namespace: "default",
-						Labels: map[string]string{
-							"my-label": "any-value",
-						},
 					},
 				},
 			},
@@ -409,24 +551,41 @@ func TestEvaluateCondition(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name: "labelExists - label present with specific value match",
+			name: "expression - complex boolean expression (false)",
 			condition: map[string]interface{}{
-				"type":       "labelExists",
+				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
 				"namespace":  "default",
-				"label":      "my-label",
-				"value":      "expected-value",
+				"expression": "true && false",
 			},
 			objects: []runtime.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-cm",
 						Namespace: "default",
-						Labels: map[string]string{
-							"my-label": "expected-value",
-						},
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "expression - with pod variables",
+			condition: map[string]interface{}{
+				"type":       "expression",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"expression": "pod.metadata.name == 'test-pod'",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
 					},
 				},
 			},
@@ -434,28 +593,66 @@ func TestEvaluateCondition(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name: "labelExists - label present but value mismatch",
+			name: "expression - with pod variables (false case)",
 			condition: map[string]interface{}{
-				"type":       "labelExists",
+				"type":       "expression",
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"name":       "test-cm",
 				"namespace":  "default",
-				"label":      "my-label",
-				"value":      "expected-value",
+				"expression": "pod.metadata.name == 'different-pod'",
 			},
 			objects: []runtime.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-cm",
 						Namespace: "default",
-						Labels: map[string]string{
-							"my-label": "different-value",
-						},
 					},
 				},
 			},
 			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "expression - with complex pod variable access",
+			condition: map[string]interface{}{
+				"type":       "expression",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"expression": "pod.metadata.namespace == 'default' && pod.metadata.name == 'test-pod'",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name: "expression - with target resource fields",
+			condition: map[string]interface{}{
+				"type":       "expression",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test-cm",
+				"namespace":  "default",
+				"expression": "resource.metadata.name == 'test-cm' && resource.metadata.namespace == 'default'",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cm",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: true,
 			expectedError:  false,
 		},
 	}

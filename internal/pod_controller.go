@@ -218,21 +218,28 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 		return false, fmt.Errorf("failed to unmarshal resource: %v", err)
 	}
 
-	// Create CEL environment and program
+	// Create CEL environment with declarations for our types
 	env, err := cel.NewEnv(
-		cel.Variable("resource", cel.DynType),
-		cel.Variable("pod", cel.DynType),
+		cel.Variable("resource", cel.AnyType),
+		cel.Variable("pod", cel.AnyType),
 	)
 	if err != nil {
 		return false, fmt.Errorf("failed to create CEL environment: %v", err)
 	}
 
-	ast, iss := env.Compile(expr)
-	if iss.Err() != nil {
-		return false, fmt.Errorf("failed to compile expression: %v", iss.Err())
+	// Parse and check the expression first
+	parsed, issues := env.Parse(expr)
+	if issues.Err() != nil {
+		return false, fmt.Errorf("failed to parse expression: %v", issues.Err())
 	}
 
-	prg, err := env.Program(ast)
+	checked, issues := env.Check(parsed)
+	if issues.Err() != nil {
+		return false, fmt.Errorf("failed to type-check expression: %v", issues.Err())
+	}
+
+	// Create program from checked expression
+	prg, err := env.Program(checked)
 	if err != nil {
 		return false, fmt.Errorf("failed to create program: %v", err)
 	}
