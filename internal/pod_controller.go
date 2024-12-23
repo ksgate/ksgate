@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
@@ -13,7 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -26,6 +29,9 @@ type PodController struct {
 	Scheme *runtime.Scheme
 }
 
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups="",resources=pods/status,verbs=get
+
 // Reconcile handles Pod events
 func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -37,14 +43,14 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// Skip if pod is not in SchedulingGated state
-	if pod.Status.Phase != "SchedulingGated" {
-		return ctrl.Result{}, nil
-	}
+	// if pod.Status.Phase != "SchedulingGated" {
+	// 	return ctrl.Result{}, nil
+	// }
 
 	// Skip if pod has no scheduling gates
-	if len(pod.Spec.SchedulingGates) == 0 {
-		return ctrl.Result{}, nil
-	}
+	// if len(pod.Spec.SchedulingGates) == 0 {
+	// 	return ctrl.Result{}, nil
+	// }
 
 	// Find our gates
 	var ourGates []corev1.PodSchedulingGate
@@ -68,7 +74,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		"gates", ourGates)
 
 	// Process each of our gates
-	removedGates := false
+	var removedGates []corev1.PodSchedulingGate
 	for _, gate := range ourGates {
 		shouldRemove, err := r.evaluateGate(ctx, &pod, gate)
 		if err != nil {
@@ -77,7 +83,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 
 		if shouldRemove {
-			removedGates = true
+			removedGates = append(removedGates, gate)
 			// Remove this gate by excluding it from otherGates
 			continue
 		}
@@ -87,7 +93,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// Update pod if we removed any gates
-	if removedGates {
+	if len(removedGates) > 0 {
 		pod.Spec.SchedulingGates = otherGates
 		if err := r.Update(ctx, &pod); err != nil {
 			logger.Error(err, "Failed to update pod scheduling gates")
@@ -96,7 +102,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		logger.Info("Updated pod scheduling gates", "pod", req.NamespacedName)
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 }
 
 // evaluateGate determines if a gate should be removed
@@ -292,6 +298,51 @@ func (r *PodController) resourceLookup(ctx context.Context, condition map[string
 // SetupWithManager sets up the controller with the Manager
 func (r *PodController) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		Named("gateman.kdex.dev").
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.podToRequests),
+		).
 		Complete(r)
+}
+
+// podToRequests maps a Pod to reconciliation requests
+func (r *PodController) podToRequests(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := log.FromContext(ctx)
+
+	pod := obj.(*corev1.Pod)
+
+	// Skip if pod is not in SchedulingGated state
+	if pod.Status.Phase != "SchedulingGated" {
+		return nil
+	}
+
+	// Skip if pod has no scheduling gates
+	if len(pod.Spec.SchedulingGates) == 0 {
+		return nil
+	}
+
+	// Check if any gates have our prefix
+	hasOurGate := false
+	for _, gate := range pod.Spec.SchedulingGates {
+		if strings.HasPrefix(gate.Name, GatePrefix) {
+			hasOurGate = true
+			break
+		}
+	}
+
+	if !hasOurGate {
+		return nil
+	}
+
+	logger.Info("IS THIS working...", "pod", pod.Name, "gates", pod.Spec.SchedulingGates)
+
+	return []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			},
+		},
+	}
 }
