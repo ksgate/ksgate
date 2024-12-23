@@ -4,218 +4,281 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func TestPodController_resourceLookup(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition map[string]interface{}
-		objects   []runtime.Object
-		wantErr   bool
-	}{
-		{
-			name: "successful configmap lookup",
-			condition: map[string]interface{}{
-				"type":       "resourceExists",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "test-cm",
-				"namespace":  "default",
-			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
-					},
-					Data: map[string]string{"key": "value"},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "resource not found",
-			condition: map[string]interface{}{
-				"type":       "resourceExists",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "nonexistent",
-				"namespace":  "default",
-			},
-			objects: []runtime.Object{},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = corev1.AddToScheme(scheme)
-
-			r := &PodController{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(tt.objects...).Build(),
-				Scheme: scheme,
-			}
-
-			_, err := r.resourceLookup(context.Background(), tt.condition)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("resourceLookup() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestPodController_evaluateExpression(t *testing.T) {
-	tests := []struct {
-		name      string
-		condition map[string]interface{}
-		pod       *corev1.Pod
-		objects   []runtime.Object
-		want      bool
-		wantErr   bool
-	}{
-		{
-			name: "simple true expression",
-			condition: map[string]interface{}{
-				"type":       "expression",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "test-cm",
-				"namespace":  "default",
-				"expression": "resource.data.key == 'value'",
-			},
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod",
-					Namespace: "default",
-				},
-			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
-					},
-					Data: map[string]string{"key": "value"},
-				},
-			},
-			want:    true,
-			wantErr: false,
-		},
-		{
-			name: "expression with pod reference",
-			condition: map[string]interface{}{
-				"type":       "expression",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "test-cm",
-				"namespace":  "default",
-				"expression": "pod.metadata.name == 'test-pod' && resource.data.key == 'value'",
-			},
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-pod",
-					Namespace: "default",
-				},
-			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
-					},
-					Data: map[string]string{"key": "value"},
-				},
-			},
-			want:    true,
-			wantErr: false,
-		},
-		{
-			name: "invalid expression",
-			condition: map[string]interface{}{
-				"type":       "expression",
-				"apiVersion": "v1",
-				"kind":       "ConfigMap",
-				"name":       "test-cm",
-				"namespace":  "default",
-				"expression": "invalid expression",
-			},
-			pod:     &corev1.Pod{},
-			objects: []runtime.Object{},
-			want:    false,
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = corev1.AddToScheme(scheme)
-
-			r := &PodController{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(tt.objects...).Build(),
-				Scheme: scheme,
-			}
-
-			got, err := r.evaluateExpression(context.Background(), tt.condition, tt.pod)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("evaluateExpression() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("evaluateExpression() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPodController_Reconcile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
 	tests := []struct {
-		name    string
-		pod     *corev1.Pod
-		objects []runtime.Object
-		wantErr bool
+		name          string
+		existingPod   *corev1.Pod
+		expectedError bool
+		expectedGates []corev1.PodSchedulingGate
 	}{
 		{
-			name: "pod with no conditions",
-			pod: &corev1.Pod{
+			name:          "pod not found",
+			existingPod:   nil,
+			expectedError: false,
+		},
+		{
+			name: "pod not in SchedulingGated state",
+			existingPod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+				},
 			},
-			objects: []runtime.Object{},
-			wantErr: false,
+			expectedError: false,
 		},
-		// Add more test cases based on your Reconcile logic
+		{
+			name: "pod with no scheduling gates",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+		},
+		{
+			name: "pod with non-matching gate prefix",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "other.domain/gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "other.domain/gate"},
+			},
+		},
+		{
+			name: "pod with matching gate but no annotation",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "gateman.kdex.dev/test-gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "gateman.kdex.dev/test-gate"},
+			},
+		},
+		{
+			name: "pod with matching gate and invalid JSON annotation",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": "invalid-json",
+					},
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "gateman.kdex.dev/test-gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "gateman.kdex.dev/test-gate"},
+			},
+		},
+		{
+			name: "pod with matching gate and valid condition that evaluates to false",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{"type":"resourceExists","apiVersion":"v1","kind":"ConfigMap","name":"test","namespace":"default"}`,
+					},
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "gateman.kdex.dev/test-gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: false,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "gateman.kdex.dev/test-gate"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = corev1.AddToScheme(scheme)
+			// Create fake client builder
+			builder := fake.NewClientBuilder().WithScheme(scheme)
 
-			allObjects := append(tt.objects, tt.pod)
+			// Only add the pod if it exists
+			if tt.existingPod != nil {
+				builder = builder.WithObjects(tt.existingPod)
+			}
+
+			// Build the client
+			client := builder.Build()
+
+			// Create controller
 			r := &PodController{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(allObjects...).Build(),
+				Client: client,
 				Scheme: scheme,
 			}
 
-			_, err := r.Reconcile(context.Background(), reconcile.Request{
+			// Create request
+			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      tt.pod.Name,
-					Namespace: tt.pod.Namespace,
+					Name:      "test-pod",
+					Namespace: "default",
 				},
-			})
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Reconcile() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
+			// Run reconcile
+			_, err := r.Reconcile(context.Background(), req)
+
+			// Check error
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// If pod should exist, verify its gates
+			if tt.existingPod != nil {
+				var pod corev1.Pod
+				err = client.Get(context.Background(), req.NamespacedName, &pod)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedGates, pod.Spec.SchedulingGates)
+			}
+		})
+	}
+}
+
+func TestEvaluateCondition(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	// Create a test pod
+	testPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+		},
+	}
+
+	tests := []struct {
+		name           string
+		condition      map[string]interface{}
+		objects        []runtime.Object
+		expectedResult bool
+		expectedError  bool
+	}{
+		{
+			name:           "missing type field",
+			condition:      map[string]interface{}{},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "unknown condition type",
+			condition: map[string]interface{}{
+				"type": "unknown",
+			},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "resourceExists - missing required fields",
+			condition: map[string]interface{}{
+				"type": "resourceExists",
+			},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "resourceExists - valid fields",
+			condition: map[string]interface{}{
+				"type":       "resourceExists",
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test",
+				"namespace":  "default",
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.objects...).
+				Build()
+
+			r := &PodController{
+				Client: client,
+				Scheme: scheme,
+			}
+
+			result, err := r.evaluateCondition(context.Background(), testPod, tt.condition)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
 }
