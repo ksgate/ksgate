@@ -55,8 +55,8 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// }
 
 	// Find our gates
-	var ourGates []corev1.PodSchedulingGate
-	var otherGates []corev1.PodSchedulingGate
+	ourGates := []corev1.PodSchedulingGate{}
+	otherGates := []corev1.PodSchedulingGate{}
 
 	for _, gate := range pod.Spec.SchedulingGates {
 		if strings.HasPrefix(gate.Name, GatePrefix) {
