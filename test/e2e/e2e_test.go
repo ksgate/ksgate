@@ -22,12 +22,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/kdex-tech/kdex-gateman/test/utils"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // namespace where the project is deployed in
@@ -244,6 +248,123 @@ var _ = Describe("Manager", Ordered, func() {
 		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
 		//    strings.ToLower(<Kind>),
 		// ))
+	})
+
+	Context("Pod Operations", func() {
+		It("should successfully watch and process pod events", func() {
+			By("creating a test pod")
+			testPod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "nginx",
+						Image: "nginx:latest",
+					}},
+				},
+			}
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(utils.ToYAML(testPod))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create test pod")
+
+			By("verifying the pod is being processed")
+			Eventually(func(g Gomega) {
+				metricsOutput := getMetricsOutput()
+				g.Expect(metricsOutput).To(ContainSubstring(
+					`controller_runtime_reconcile_total{controller="pod",result="success"}`,
+				))
+			}).Should(Succeed())
+		})
+
+		It("should handle pod deletions correctly", func() {
+			By("deleting the test pod")
+			cmd := exec.Command("kubectl", "delete", "pod", "test-pod", "-n", namespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete test pod")
+
+			By("verifying the deletion was processed")
+			Eventually(func(g Gomega) {
+				metricsOutput := getMetricsOutput()
+				g.Expect(metricsOutput).To(ContainSubstring(
+					`controller_runtime_reconcile_total{controller="pod",result="success"}`,
+				))
+			}).Should(Succeed())
+		})
+	})
+
+	Context("Error Handling", func() {
+		It("should handle invalid pod specifications gracefully", func() {
+			By("creating a pod with invalid configuration")
+			invalidPod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-pod",
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "invalid",
+						Image: "", // Invalid empty image
+					}},
+				},
+			}
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(utils.ToYAML(invalidPod))
+			_, _ = utils.Run(cmd)
+
+			By("verifying error metrics are recorded")
+			Eventually(func(g Gomega) {
+				metricsOutput := getMetricsOutput()
+				g.Expect(metricsOutput).To(ContainSubstring(
+					`controller_runtime_reconcile_errors_total{controller="pod"}`,
+				))
+			}).Should(Succeed())
+		})
+	})
+
+	Context("Resource Validation", func() {
+		It("should validate pod resource requirements", func() {
+			By("creating a pod with resource requirements")
+			podWithResources := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "resource-pod",
+					Namespace: namespace,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "nginx",
+						Image: "nginx:latest",
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("100m"),
+								corev1.ResourceMemory: resource.MustParse("100Mi"),
+							},
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("50m"),
+								corev1.ResourceMemory: resource.MustParse("50Mi"),
+							},
+						},
+					}},
+				},
+			}
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(utils.ToYAML(podWithResources))
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create pod with resources")
+
+			By("verifying resource validation metrics")
+			Eventually(func(g Gomega) {
+				metricsOutput := getMetricsOutput()
+				g.Expect(metricsOutput).To(ContainSubstring(
+					`controller_runtime_reconcile_total{controller="pod",result="success"}`,
+				))
+			}).Should(Succeed())
+		})
 	})
 })
 

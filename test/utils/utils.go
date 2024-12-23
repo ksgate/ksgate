@@ -24,7 +24,9 @@ import (
 	"os/exec"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive
+	"sigs.k8s.io/yaml"
+
+	ginkov2 "github.com/onsi/ginkgo/v2" //nolint:golint,revive
 )
 
 const (
@@ -37,7 +39,7 @@ const (
 )
 
 func warnError(err error) {
-	_, _ = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
+	_, _ = fmt.Fprintf(ginkov2.GinkgoWriter, "warning: %v\n", err)
 }
 
 // Run executes the provided command within this context
@@ -46,12 +48,12 @@ func Run(cmd *exec.Cmd) (string, error) {
 	cmd.Dir = dir
 
 	if err := os.Chdir(cmd.Dir); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "chdir dir: %s\n", err)
+		_, _ = fmt.Fprintf(ginkov2.GinkgoWriter, "chdir dir: %s\n", err)
 	}
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
-	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
+	_, _ = fmt.Fprintf(ginkov2.GinkgoWriter, "running: %s\n", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("%s failed with error: (%v) %s", command, err, string(output))
@@ -248,4 +250,13 @@ func UncommentCode(filename, target, prefix string) error {
 	// false positive
 	// nolint:gosec
 	return os.WriteFile(filename, out.Bytes(), 0644)
+}
+
+// ToYAML converts any object to its YAML representation
+func ToYAML(obj interface{}) string {
+	data, err := yaml.Marshal(obj)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
 }
