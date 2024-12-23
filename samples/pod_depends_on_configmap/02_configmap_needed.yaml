@@ -1,0 +1,7 @@
+# Deploy this after the pod to see the pod scheduled
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
+data:
+  my-key: the value

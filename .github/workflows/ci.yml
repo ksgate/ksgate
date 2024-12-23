@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+    - 'dependabot/**'
+    paths:
+    - '**'
+    - '!docs/**'
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+    - '**'
+    - '!docs/**'
+
+env:
+  LC_ALL: en_US.UTF-8
+  PUBLISH: ${{ (github.repository == 'ksgate/ksgate') && startsWith(github.ref, 'refs/tags/') && (github.event_name != 'pull_request') }}
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  ci:
+    name: Build, Test, Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '~1.23.0'
+
+      - name: Run Tidy
+        run: go mod tidy
+
+      - name: Run Linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.61
+
+      - name: Run Unit Tests
+        run: make test
+
+      - name: Running E2E Tests
+        uses: ./.github/actions/e2e-tests
+
+      - name: Publish Docker Image
+        if: ${{ env.PUBLISH == 'true' }}
+        uses: ./.github/actions/publish-docker-image
+
+      - name: Publish Helm Chart
+        if: ${{ env.PUBLISH == 'true' }}
+        uses: ./.github/actions/publish-helm-chart

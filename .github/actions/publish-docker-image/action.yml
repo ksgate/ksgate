@@ -1,0 +1,33 @@
+name: 'Publish Docker Image'
+description: 'Publish Docker Image'
+
+runs:
+  using: "composite"
+  steps:
+
+  - name: Log in to registry with Docker
+    shell: bash
+    run: |
+      echo "${{ github.token }}" | docker login ghcr.io/${{ github.repository_owner }} -u ${{ github.actor }} --password-stdin
+
+  - name: Push image
+    shell: bash
+    run: |
+      # This is the tag name
+      echo GITHUB_REF=${{ github.ref }}
+
+      # This is the image name
+      IMAGE_ID=ghcr.io/${{ github.repository_owner }}/ksgate
+      IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+      echo IMAGE_ID=$IMAGE_ID
+
+      # This is the version
+      VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+      [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+      [ "$VERSION" == "main" ] && VERSION=latest
+      echo VERSION=$VERSION
+
+      # This is the image name and version
+      export IMG=$IMAGE_ID:$VERSION IMG_NAME=$IMAGE_ID IMG_VERSION=$VERSION
+
+      make docker-buildx

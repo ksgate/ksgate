@@ -1,0 +1,25 @@
+# Deploy this first to see the pod gated from being schedule
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-app
+  annotations:
+    k8s.ksgate.org/configmap: |
+      {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "my-configmap"
+      }
+spec:
+  schedulingGates:
+  - name: k8s.ksgate.org/configmap
+  containers:
+  - name: nginx
+    image: nginx
+    env:
+    - name: MY_CONFIGMAP
+      valueFrom:
+        configMapKeyRef:
+          name: my-configmap
+          key: my-key
+
