@@ -186,7 +186,10 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 	resource, err := r.resourceLookup(ctx, condition)
 
 	if err != nil {
-		return false, err
+		if err.Error() == "missing required fields for resourceLookup" {
+			return false, err
+		}
+		return false, nil
 	}
 
 	// Get the expression from the condition
