@@ -28,11 +28,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
-        run: |
-            export IMG=$IMAGE_NAME
-            make docker-build
-
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
         #
@@ -50,5 +45,5 @@ jobs:
           [ "$VERSION" == "main" ] && VERSION=latest
           echo IMAGE_ID=$IMAGE_ID
           echo VERSION=$VERSION
-          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+          export IMG=$IMAGE_ID:$VERSION
+          make docker-buildx
