@@ -17,3 +17,8 @@
     ```shell
     git push origin v0.1.0
     ```
+
+## TODO
+
+- create docker publish github actions workflow using`make docker-push`
+- create a helm chart
