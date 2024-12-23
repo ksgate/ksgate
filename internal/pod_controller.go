@@ -143,15 +143,15 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
 	expression := condition["expression"]
 	if expression == nil {
-		return r.evaluateResourceExists(ctx, condition)
+		return r.evaluateResourceExists(ctx, pod, condition)
 	}
-	return r.evaluateExpression(ctx, condition, pod)
+	return r.evaluateExpression(ctx, pod, condition)
 }
 
 // Example condition evaluators
-func (r *PodController) evaluateResourceExists(ctx context.Context, condition map[string]interface{}) (bool, error) {
+func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
 	// Check if resource exists
-	_, err := r.resourceLookup(ctx, condition)
+	_, err := r.resourceLookup(ctx, pod, condition)
 
 	if apierrors.IsNotFound(err) {
 		return false, nil
@@ -160,9 +160,9 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, condition ma
 	return err == nil, err
 }
 
-func (r *PodController) evaluateExpression(ctx context.Context, condition map[string]interface{}, pod *corev1.Pod) (bool, error) {
+func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
 	// Check if resource exists
-	resource, err := r.resourceLookup(ctx, condition)
+	resource, err := r.resourceLookup(ctx, pod, condition)
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -244,7 +244,7 @@ func (r *PodController) evaluateExpression(ctx context.Context, condition map[st
 	return result, nil
 }
 
-func (r *PodController) resourceLookup(ctx context.Context, condition map[string]interface{}) (*unstructured.Unstructured, error) {
+func (r *PodController) resourceLookup(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (*unstructured.Unstructured, error) {
 	// Extract required fields
 	// Create an unstructured object to query the resource
 	apiVersion, ok1 := condition["apiVersion"].(string)
@@ -252,7 +252,11 @@ func (r *PodController) resourceLookup(ctx context.Context, condition map[string
 	name, ok3 := condition["name"].(string)
 	namespace, ok4 := condition["namespace"].(string)
 
-	if !ok1 || !ok2 || !ok3 || !ok4 {
+	if !ok4 {
+		namespace = pod.Namespace
+	}
+
+	if !ok1 || !ok2 || !ok3 {
 		return nil, fmt.Errorf("missing required fields for resourceLookup")
 	}
 
