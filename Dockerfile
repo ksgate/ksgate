@@ -5,6 +5,10 @@ FROM golang:${GO_VERSION} AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
+LABEL org.opencontainers.image.source=https://github.com/kdex-tech/kdex-gateman
+LABEL org.opencontainers.image.description="KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions."
+LABEL org.opencontainers.image.licenses=Apache-2.0
+
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod

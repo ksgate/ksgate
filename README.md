@@ -1,11 +1,11 @@
-# KDex Gate Manager
+# KDex Gateman
 
-KDex Gate Manager (a.k.a. gateman) is a Kubernetes controller that manages the lifecycle of pods that are gated from being scheduled.
+KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
 
 ## Description
-Welcome to the future! Avoid wasting resources scheduling pods that are not ready to run due to missing dependencies.
+Avoid wasting resources scheduling pods that are not ready to run due to unsatisfied dependencies.
 
-With gateman you can easily declare your dependencies using a [PodSchedulingGate](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-scheduling-gate-v1/) plus an annotation that describes a condition on a resource. Then, let gateman take care of the rest.
+With Gateman you can easily declare your dependencies using a [PodSchedulingGate](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-scheduling-gate-v1/) plus an annotation that describes a condition on a resource. Then, let Gateman take care of the rest.
 
 Here's a quick example:
 
@@ -56,12 +56,12 @@ Furthermore, gated scheduling is essentially resource free with __no__ time limi
 
 However, this approach requires an external actor to understand the meaning of the gate and to remove the gate once the pod can be scheduled.
 
-This is where gateman comes in. It automates the process of evaluating conditions and removing gates.
+This is where Gateman comes in. It automates the process of evaluating conditions and removing gates.
 
 ## Documentation
 
 ### Gates
-Gates must be prefixed with `gateman.kdex.dev/` to be recognized by gateman. The suffix is used to identify individual gates and is arbitrary.
+Gates must be prefixed with `gateman.kdex.dev/` to be recognized by Gateman. The suffix is used to identify individual gates and is arbitrary.
 
 ### Annotations
 An annotation by the same name is used to hold the condition which is JSON Object that conforms to the [condition schema](condition.schema.json).
