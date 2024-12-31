@@ -134,7 +134,16 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	echo "---"
 	- $(CONTAINER_TOOL) buildx create --name kdex-gateman-builder
 	$(CONTAINER_TOOL) buildx use kdex-gateman-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --build-arg GO_VERSION=$(GO_VERSION) --tag ${IMG} --tag ${IMG_NAME}:latest -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build \
+		--push \
+		--platform=$(PLATFORMS) \
+		--build-arg GO_VERSION=$(GO_VERSION) \
+		--tag ${IMG} \
+		--tag ${IMG_NAME}:latest \
+		--annotation 'manifest:org.opencontainers.image.source=https://github.com/kdex-tech/kdex-gateman,\
+manifest:org.opencontainers.image.description="KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.",\
+manifest:org.opencontainers.image.licenses=Apache-2.0' \
+		-f Dockerfile.cross .
 	rm Dockerfile.cross
 
 .PHONY: build-installer
