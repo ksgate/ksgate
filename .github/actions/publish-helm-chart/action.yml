@@ -23,7 +23,7 @@ runs:
       echo VERSION=$VERSION
 
       # Package the Helm chart
-      helm package --app-version ${VERSION} ./helm -d ./dist
+      helm package --app-version ${VERSION} --version ${VERSION} ./helm -d ./dist
 
   - name: Log in to registry with Helm
     shell: bash
