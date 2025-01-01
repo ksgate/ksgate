@@ -1,0 +1,39 @@
+name: 'Publish Helm Chart'
+description: 'Publish Helm Chart'
+
+runs:
+  using: "composite"
+  steps:
+
+  - name: Install Helm
+    uses: azure/setup-helm@v3
+    with:
+      token: ${{ env.GITHUB_TOKEN }}
+
+  - name: Package Helm Chart
+    run: |
+      # This is the tag name
+      echo GITHUB_REF=${{ github.ref }}
+
+      # This is the version
+      VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+      [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+      [ "$VERSION" == "main" ] && VERSION=latest
+      echo VERSION=$VERSION
+
+      # Package the Helm chart
+      helm package --app-version ${VERSION} ./helm -d ./dist
+
+  - name: Log in to registry with with Helm
+    shell: bash
+    run: |
+      echo "${GITHUB_TOKEN}" | helm registry login ghcr.io/${{ github.repository }} --username ${GITHUB_ACTOR} --password-stdin
+
+  - name: Push Helm Charts to Github Container Registry (OCI)
+    shell: bash
+    working-directory: dist
+    run: |
+      for f in *.tgz ; do
+          echo "$f"
+          helm push $f oci://ghcr.io/${{ github.repository }}
+      done
