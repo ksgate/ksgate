@@ -7,16 +7,12 @@ on:
     paths:
     - '**'
     - '!docs/**'
-    - '!.github/**'
-    - '.github/**/*ci*'
     tags:
       - 'v*'
   pull_request:
     paths:
     - '**'
     - '!docs/**'
-    - '!.github/**'
-    - '.github/**/*ci*'
 
 env:
   LC_ALL: en_US.UTF-8
