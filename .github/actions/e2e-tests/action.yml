@@ -1,5 +1,10 @@
 name: 'Execute E2E Tests'
 description: 'Execute E2E tests'
+
+defaults:
+  run:
+    shell: bash
+
 runs:
   using: "composite"
   steps:
