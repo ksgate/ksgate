@@ -6,10 +6,12 @@ runs:
   steps:
 
   - name: Log in to registry with Docker
+    shell: bash
     run: |
       echo "${GITHUB_TOKEN}" | docker login ghcr.io/${{ github.repository }} -u ${GITHUB_ACTOR} --password-stdin
 
   - name: Push image
+    shell: bash
     run: |
       # This is the tag name
       echo GITHUB_REF=${{ github.ref }}
