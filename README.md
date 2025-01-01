@@ -75,6 +75,24 @@ The CEL environment contains two variables: `resource` and `pod`. `resource` giv
 #### CEL (Common Expression Language)
 CEL expressions are a powerful feature that allow for complex filtering and validation. For more information, see the [CEL documentation](https://kubernetes.io/docs/reference/using-api/cel/).
 
+## Installation
+
+The Gateman controller image is available at [ghcr.io/kdex-tech/kdex-gateman](https://github.com/kdex-tech/kdex-gateman/pkgs/container/kdex-gateman).
+
+However, I recommend using the Helm chart to install Gateman.
+
+### Helm Chart
+
+The Helm chart is available as an OCI artifact at [oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman](oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman).
+
+I recommend placing the chart resources in a dedicated namespace since this is generally used as a cluster-wide controller.
+
+To install the chart, run:
+
+```sh
+helm install gateman oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman --version <version> --namespace gateman-system --create-namespace
+```
+
 ## License
 
 Copyright 2024.
