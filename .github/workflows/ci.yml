@@ -50,8 +50,8 @@ jobs:
       - name: Run Unit Tests
         run: make test
 
-      # - name: Running E2E Tests
-      #   uses: ./.github/actions/e2e-tests
+      - name: Running E2E Tests
+        uses: ./.github/actions/e2e-tests
 
       - name: Publish Docker Image
         if: ${{ env.PUBLISH == 'true' }}
