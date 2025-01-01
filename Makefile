@@ -152,6 +152,10 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
+.PHONY: helm
+helm: ## Package helm chart
+	helm package --app-version $(IMG_VERSION) ./helm -d dist
+
 ##@ Deployment
 
 ifndef ignore-not-found
