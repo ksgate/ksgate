@@ -8,9 +8,10 @@ runs:
   - name: Install Helm
     uses: azure/setup-helm@v3
     with:
-      token: ${{ env.GITHUB_TOKEN }}
+      token: ${{ github.token }}
 
   - name: Package Helm Chart
+    shell: bash
     run: |
       # This is the tag name
       echo GITHUB_REF=${{ github.ref }}
@@ -24,10 +25,10 @@ runs:
       # Package the Helm chart
       helm package --app-version ${VERSION} ./helm -d ./dist
 
-  - name: Log in to registry with with Helm
+  - name: Log in to registry with Helm
     shell: bash
     run: |
-      echo "${GITHUB_TOKEN}" | helm registry login ghcr.io/${{ github.repository }} --username ${GITHUB_ACTOR} --password-stdin
+      echo "${{ github.token }}" | helm registry login ghcr.io/${{ github.repository }} --username ${{ github.actor }} --password-stdin
 
   - name: Push Helm Charts to Github Container Registry (OCI)
     shell: bash

@@ -57,6 +57,6 @@ jobs:
         if: ${{ env.PUBLISH == 'true' }}
         uses: ./.github/actions/publish-docker-image
 
-      # - name: Publish Helm Chart
-      #   if: ${{ env.PUBLISH == 'true' }}
-      #   uses: ./.github/actions/publish-helm-chart
+      - name: Publish Helm Chart
+        if: ${{ env.PUBLISH == 'true' }}
+        uses: ./.github/actions/publish-helm-chart
