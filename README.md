@@ -1,5 +1,7 @@
 # KDex Gateman
 
+[![CI](https://github.com/kdex-tech/kdex-gateman/actions/workflows/ci.yml/badge.svg)](https://github.com/kdex-tech/kdex-gateman/actions/workflows/ci.yml)
+
 KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
 
 ## Description
