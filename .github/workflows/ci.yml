@@ -54,9 +54,9 @@ jobs:
         uses: ./.github/actions/e2e-tests
 
       - name: Publish Docker Image
-        if: ${{ env.PUBLISH }}
+        if: ${{ env.PUBLISH == 'true' }}
         uses: ./.github/actions/publish-docker-image
 
       # - name: Publish Helm Chart
-      #   if: ${{ env.PUBLISH }}
+      #   if: ${{ env.PUBLISH == 'true' }}
       #   uses: ./.github/actions/publish-helm-chart
