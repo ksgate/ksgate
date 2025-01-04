@@ -22,8 +22,4 @@ spec:
         configMapKeyRef:
           name: my-configmap
           key: my-key
-  volumes:
-  - name: my-configmap
-    configMap:
-      name: my-configmap
 
