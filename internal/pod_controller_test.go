@@ -12,9 +12,12 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestPodController_Reconcile(t *testing.T) {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
@@ -273,7 +276,161 @@ func TestPodController_Reconcile(t *testing.T) {
 	}
 }
 
-func TestEvaluateCondition(t *testing.T) {
+func TestPodController_evaluateGate(t *testing.T) {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	tests := []struct {
+		name           string
+		gate           corev1.PodSchedulingGate
+		pod            *corev1.Pod
+		objects        []runtime.Object
+		expectedResult bool
+		expectedError  bool
+	}{
+		{
+			name: "gate with no condition",
+			gate: corev1.PodSchedulingGate{
+				Name: "gateman.kdex.dev/test-gate",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "gate with invalid condition JSON",
+			gate: corev1.PodSchedulingGate{
+				Name: "gateman.kdex.dev/test-gate",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": "{invalid json",
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "gate with valid condition that evaluates to false",
+			gate: corev1.PodSchedulingGate{
+				Name: "gateman.kdex.dev/test-gate",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"expression":"false"
+						}`,
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "gate with valid condition that evaluates to true",
+			gate: corev1.PodSchedulingGate{
+				Name: "gateman.kdex.dev/test-gate",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"expression":"true"
+						}`,
+					},
+				},
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name: "gate with valid condition on missing resource property",
+			gate: corev1.PodSchedulingGate{
+				Name: "gateman.kdex.dev/test-gate",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"expression":"resource.foo == 'bar'"
+						}`,
+					},
+				},
+			},
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.objects...).
+				Build()
+
+			r := &PodController{
+				Client: client,
+				Scheme: scheme,
+			}
+
+			got, err := r.evaluateGate(context.Background(), tt.pod, tt.gate)
+			if (err != nil) != tt.expectedError {
+				t.Errorf("PodController.evaluateGate() error = %v, wantErr %v", err, tt.expectedError)
+				return
+			}
+			if got != tt.expectedResult {
+				t.Errorf("PodController.evaluateGate() = %v, want %v", got, tt.expectedResult)
+			}
+		})
+	}
+}
+
+func TestPodController_evaluateCondition(t *testing.T) {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 

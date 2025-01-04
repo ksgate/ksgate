@@ -119,22 +119,22 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 	annotationKey := gate.Name
 	condition, exists := pod.Annotations[annotationKey]
 	if !exists {
-		logger.Error(nil, "No condition annotation found for gate", "gate", gate.Name)
-		return false, fmt.Errorf("missing gate condition annotation: %v", gate.Name)
+		logger.Info("No condition annotation found matching gate name. This is an incorrect usage of the gate.", "gate", gate.Name, "pod", pod.Name, "namespace", pod.Namespace)
+		return false, nil
 	}
 
 	// Parse the JSON condition
 	var gateCondition map[string]interface{}
 	if err := json.Unmarshal([]byte(condition), &gateCondition); err != nil {
-		logger.Error(err, "Failed to parse gate condition", "gate", gate.Name, "condition", condition)
-		return false, fmt.Errorf("invalid gate condition format: %v", err)
+		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", condition, "message", err.Error())
+		return false, nil
 	}
 
 	// Evaluate the condition based on the JSON content
 	satisfied, err := r.evaluateCondition(ctx, pod, gateCondition)
 	if err != nil {
-		logger.Error(err, "Failed to evaluate condition", "gate", gate.Name, "condition", gateCondition)
-		return false, err
+		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", gateCondition, "message", err.Error())
+		return false, nil
 	}
 
 	return satisfied, nil
