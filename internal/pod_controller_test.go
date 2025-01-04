@@ -288,7 +288,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 		pod            *corev1.Pod
 		objects        []runtime.Object
 		expectedResult bool
-		expectedError  bool
 	}{
 		{
 			name: "gate with no condition",
@@ -302,7 +301,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "gate with invalid condition JSON",
@@ -319,7 +317,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "gate with valid condition that evaluates to false",
@@ -341,7 +338,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "gate with valid condition that evaluates to true",
@@ -371,7 +367,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "gate with valid condition on missing resource property",
@@ -401,7 +396,6 @@ func TestPodController_evaluateGate(t *testing.T) {
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 	}
 	for _, tt := range tests {
@@ -416,11 +410,7 @@ func TestPodController_evaluateGate(t *testing.T) {
 				Scheme: scheme,
 			}
 
-			got, err := r.evaluateGate(context.Background(), tt.pod, tt.gate)
-			if (err != nil) != tt.expectedError {
-				t.Errorf("PodController.evaluateGate() error = %v, wantErr %v", err, tt.expectedError)
-				return
-			}
+			got := r.evaluateGate(context.Background(), tt.pod, tt.gate)
 			if got != tt.expectedResult {
 				t.Errorf("PodController.evaluateGate() = %v, want %v", got, tt.expectedResult)
 			}

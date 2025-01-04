@@ -68,13 +68,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// Process each of our gates
 	var removedGates []corev1.PodSchedulingGate
 	for _, gate := range ourGates {
-		shouldRemove, err := r.evaluateGate(ctx, &pod, gate)
-		if err != nil {
-			logger.Error(err, "Failed evaluating gate", "gate", gate.Name)
-			continue
-		}
-
-		if shouldRemove {
+		if r.evaluateGate(ctx, &pod, gate) {
 			removedGates = append(removedGates, gate)
 			// Remove this gate by excluding it from otherGates
 			continue
@@ -102,7 +96,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 // evaluateGate determines if a gate should be removed
-func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate) (bool, error) {
+func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate) bool {
 	logger := log.FromContext(ctx)
 
 	// Look for annotation matching the gate name
@@ -110,24 +104,24 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 	condition, exists := pod.Annotations[annotationKey]
 	if !exists {
 		logger.Info("No condition annotation found matching gate name. This is an incorrect usage of the gate.", "gate", gate.Name, "pod", pod.Name, "namespace", pod.Namespace)
-		return false, nil
+		return false
 	}
 
 	// Parse the JSON condition
 	var gateCondition map[string]interface{}
 	if err := json.Unmarshal([]byte(condition), &gateCondition); err != nil {
 		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", condition, "message", err.Error())
-		return false, nil
+		return false
 	}
 
 	// Evaluate the condition based on the JSON content
 	satisfied, err := r.evaluateCondition(ctx, pod, gateCondition)
 	if err != nil {
 		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", gateCondition, "message", err.Error())
-		return false, nil
+		return false
 	}
 
-	return satisfied, nil
+	return satisfied
 }
 
 func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
