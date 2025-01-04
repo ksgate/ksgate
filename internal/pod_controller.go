@@ -44,16 +44,6 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Skip if pod is not in SchedulingGated state
-	// if pod.Status.Phase != "SchedulingGated" {
-	// 	return ctrl.Result{}, nil
-	// }
-
-	// Skip if pod has no scheduling gates
-	// if len(pod.Spec.SchedulingGates) == 0 {
-	// 	return ctrl.Result{}, nil
-	// }
-
 	// Find our gates
 	ourGates := []corev1.PodSchedulingGate{}
 	otherGates := []corev1.PodSchedulingGate{}
