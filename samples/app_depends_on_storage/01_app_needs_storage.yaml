@@ -1,0 +1,67 @@
+# Deploy this first to see the pod gated from being schedule
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  labels:
+    app: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      annotations:
+        gateman.kdex.dev/postgres-config: |
+          {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "name": "postgres-config"
+          }
+        gateman.kdex.dev/postgres-deployment: |
+          {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "name": "postgres",
+            "expression": "resource.status.readyReplicas >= 1"
+          }
+        gateman.kdex.dev/postgres-service: |
+          {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "name": "postgres"
+          }
+      labels:
+        app: my-app
+    spec:
+      schedulingGates:
+      - name: gateman.kdex.dev/postgres-config
+      - name: gateman.kdex.dev/postgres-deployment
+      - name: gateman.kdex.dev/postgres-service
+      containers:
+      - name: my-app
+        image: bash:latest
+        command:
+        - /usr/local/bin/bash
+        - -c
+        - |
+          cleanup()
+          {
+            echo "Recieved signal to exit"
+            exit 0
+          }
+          trap cleanup SIGTERM SIGINT
+          apk --no-cache add postgresql17-client
+          export PGPASSWORD=$(POSTGRES_PASSWORD)
+          export PGHOST=postgres
+          export PGPORT=5432
+          while true; do
+            date +%s
+            psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c "SELECT 1 as SUCCESS"
+            sleep 5
+          done
+        envFrom:
+        - configMapRef:
+            name: postgres-config
+
