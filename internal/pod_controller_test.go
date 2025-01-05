@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,11 +12,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestPodController_Reconcile(t *testing.T) {
@@ -316,6 +320,59 @@ func TestPodController_Reconcile(t *testing.T) {
 				err = client.Get(context.Background(), req.NamespacedName, &pod)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedGates, pod.Spec.SchedulingGates)
+			}
+		})
+	}
+}
+
+func TestPodController_SetupWithManager(t *testing.T) {
+	type fields struct {
+		Client client.Client
+		Scheme *runtime.Scheme
+	}
+	type args struct {
+		mgr ctrl.Manager
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "nil manager",
+			fields: fields{
+				Client: nil,
+				Scheme: nil,
+			},
+			args: args{
+				mgr: nil,
+			},
+			wantErr: true,
+		},
+		{
+			name: "manager",
+			fields: fields{
+				Client: nil,
+				Scheme: nil,
+			},
+			args: args{
+				mgr: func() manager.Manager {
+					m, _ := ctrl.NewManager(&rest.Config{}, manager.Options{})
+					return m
+				}(),
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &PodController{
+				Client: tt.fields.Client,
+				Scheme: tt.fields.Scheme,
+			}
+			if err := r.SetupWithManager(tt.args.mgr); (err != nil) != tt.wantErr {
+				t.Errorf("PodController.SetupWithManager() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -812,6 +869,135 @@ func TestPodController_evaluateExpression(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestPodController_podToRequests(t *testing.T) {
+	type fields struct {
+		Client client.Client
+		Scheme *runtime.Scheme
+	}
+	type args struct {
+		ctx context.Context
+		obj client.Object
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   []reconcile.Request
+	}{
+		// TODO: Add test cases.
+		{
+			name: "pod not pending",
+			fields: fields{
+				Client: nil,
+				Scheme: nil,
+			},
+			args: args{
+				ctx: context.Background(),
+				obj: &corev1.Pod{},
+			},
+		},
+		{
+			name: "pod is pending",
+			args: args{
+				ctx: context.Background(),
+				obj: &corev1.Pod{
+					Status: corev1.PodStatus{
+						Phase: corev1.PodPending,
+					},
+				},
+			},
+		},
+		{
+			name: "pod is scheduled but has no scheduling gates",
+			args: args{
+				ctx: context.Background(),
+				obj: &corev1.Pod{
+					Status: corev1.PodStatus{
+						Phase: corev1.PodPending,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodScheduled,
+								Reason: "Foo",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "pod is scheduled and has scheduling gates",
+			args: args{
+				ctx: context.Background(),
+				obj: &corev1.Pod{
+					Status: corev1.PodStatus{
+						Phase: corev1.PodPending,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodScheduled,
+								Reason: "SchedulingGated",
+							},
+						},
+					},
+					Spec: corev1.PodSpec{
+						SchedulingGates: []corev1.PodSchedulingGate{
+							{
+								Name: "foo",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "pod has scheduling gate with our prefix",
+			args: args{
+				ctx: context.Background(),
+				obj: &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pod",
+						Namespace: "default",
+					},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodPending,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.PodScheduled,
+								Reason: "SchedulingGated",
+							},
+						},
+					},
+					Spec: corev1.PodSpec{
+						SchedulingGates: []corev1.PodSchedulingGate{
+							{
+								Name: "gateman.kdex.dev/foo",
+							},
+						},
+					},
+				},
+			},
+			want: []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      "test-pod",
+						Namespace: "default",
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &PodController{
+				Client: tt.fields.Client,
+				Scheme: tt.fields.Scheme,
+			}
+			if got := r.podToRequests(tt.args.ctx, tt.args.obj); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("PodController.podToRequests() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
