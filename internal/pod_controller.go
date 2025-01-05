@@ -117,7 +117,7 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 	// Evaluate the condition based on the JSON content
 	satisfied, err := r.evaluateCondition(ctx, pod, gateCondition)
 	if err != nil {
-		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", gateCondition, "message", err.Error())
+		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", condition, "message", err.Error())
 		return false
 	}
 
