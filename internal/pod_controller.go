@@ -135,13 +135,17 @@ func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, 
 // Example condition evaluators
 func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
 	// Check if resource exists
-	_, err := r.resourceLookup(ctx, pod, condition)
+	resource, err := r.resourceLookup(ctx, pod, condition)
 
-	if apierrors.IsNotFound(err) {
-		return false, nil
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		return false, err
 	}
 
-	return err == nil, err
+	return resource != nil, nil
 }
 
 func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
@@ -153,10 +157,7 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 			return false, nil
 		}
 
-		if err.Error() == "missing required fields for resourceLookup" {
-			return false, err
-		}
-		return false, nil
+		return false, err
 	}
 
 	// Get the expression from the condition
