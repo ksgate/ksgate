@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -23,11 +26,12 @@ func TestPodController_Reconcile(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := []struct {
-		name          string
-		existingPod   *corev1.Pod
-		expectedError bool
-		expectedGates []corev1.PodSchedulingGate
-		addResource   bool
+		name             string
+		existingPod      *corev1.Pod
+		interceptorFuncs *interceptor.Funcs
+		expectedError    bool
+		expectedGates    []corev1.PodSchedulingGate
+		addResource      bool
 	}{
 		{
 			name:          "pod not found",
@@ -216,6 +220,41 @@ func TestPodController_Reconcile(t *testing.T) {
 			},
 			addResource: true,
 		},
+		{
+			name: "pod update fails",
+			existingPod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"gateman.kdex.dev/test-gate": `{
+							"apiVersion":"v1",
+							"kind":"ConfigMap",
+							"name":"test",
+							"namespace":"default"
+						}`,
+					},
+				},
+				Spec: corev1.PodSpec{
+					SchedulingGates: []corev1.PodSchedulingGate{
+						{Name: "gateman.kdex.dev/test-gate"},
+					},
+				},
+				Status: corev1.PodStatus{
+					Phase: "SchedulingGated",
+				},
+			},
+			expectedError: true,
+			expectedGates: []corev1.PodSchedulingGate{
+				{Name: "gateman.kdex.dev/test-gate"},
+			},
+			interceptorFuncs: &interceptor.Funcs{
+				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+					return errors.New("update failed")
+				},
+			},
+			addResource: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -236,6 +275,12 @@ func TestPodController_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				})
+			}
+
+			if tt.interceptorFuncs != nil {
+				builder.WithInterceptorFuncs(
+					*tt.interceptorFuncs,
+				)
 			}
 
 			// Build the client
