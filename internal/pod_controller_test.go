@@ -485,6 +485,12 @@ func TestPodController_evaluateCondition(t *testing.T) {
 		expectedError  bool
 	}{
 		{
+			name:           "missing condition",
+			condition:      nil,
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
 			name:           "resourceExists - missing required fields",
 			condition:      map[string]interface{}{},
 			expectedResult: false,
@@ -718,6 +724,93 @@ func TestPodController_evaluateCondition(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestPodController_evaluateExpression(t *testing.T) {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	// Create a test pod
+	testPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+		},
+	}
+
+	tests := []struct {
+		name           string
+		condition      map[string]interface{}
+		expression     interface{}
+		objects        []runtime.Object
+		expectedResult bool
+		expectedError  bool
+	}{
+		{
+			name:           "1 missing expression",
+			condition:      map[string]interface{}{},
+			expectedResult: false,
+			expectedError:  true,
+		},
+		{
+			name: "2 resource missing",
+			condition: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test",
+				"namespace":  "default",
+			},
+			expression:     "true",
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name: "3 expression does not evaluate to boolean",
+			condition: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"name":       "test",
+				"namespace":  "default",
+			},
+			expression: "45",
+			objects: []runtime.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "default",
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithRuntimeObjects(tt.objects...).
+				Build()
+
+			r := &PodController{
+				Client: client,
+				Scheme: scheme,
+			}
+
+			result, err := r.evaluateExpression(context.Background(), testPod, tt.condition, tt.expression)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}

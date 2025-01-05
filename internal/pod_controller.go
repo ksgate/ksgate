@@ -101,23 +101,23 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 
 	// Look for annotation matching the gate name
 	annotationKey := gate.Name
-	condition, exists := pod.Annotations[annotationKey]
+	annotationValue, exists := pod.Annotations[annotationKey]
 	if !exists {
 		logger.Info("No condition annotation found matching gate name. This is an incorrect usage of the gate.", "gate", gate.Name, "pod", pod.Name, "namespace", pod.Namespace)
 		return false
 	}
 
 	// Parse the JSON condition
-	var gateCondition map[string]interface{}
-	if err := json.Unmarshal([]byte(condition), &gateCondition); err != nil {
-		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", condition, "message", err.Error())
+	var condition map[string]interface{}
+	if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
+		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
 		return false
 	}
 
 	// Evaluate the condition based on the JSON content
-	satisfied, err := r.evaluateCondition(ctx, pod, gateCondition)
+	satisfied, err := r.evaluateCondition(ctx, pod, condition)
 	if err != nil {
-		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", condition, "message", err.Error())
+		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
 		return false
 	}
 
@@ -125,6 +125,9 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 }
 
 func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
+	if condition == nil {
+		return false, fmt.Errorf("condition is required")
+	}
 	expression := condition["expression"]
 	if expression == nil {
 		return r.evaluateResourceExists(ctx, pod, condition)
@@ -149,6 +152,10 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.
 }
 
 func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}, expression interface{}) (bool, error) {
+	if expression == nil {
+		return false, fmt.Errorf("expression is required")
+	}
+
 	// Check if resource exists
 	resource, err := r.resourceLookup(ctx, pod, condition)
 
@@ -161,50 +168,30 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 	}
 
 	// Convert pod to JSON
-	podJSON, err := json.Marshal(pod)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal pod: %v", err)
-	}
+	podJSON, _ := json.Marshal(pod)
 	var podData map[string]interface{}
-	if err := json.Unmarshal(podJSON, &podData); err != nil {
-		return false, fmt.Errorf("failed to unmarshal pod: %v", err)
-	}
+	_ = json.Unmarshal(podJSON, &podData)
 
 	// Convert unstructured to JSON
-	resourceJSON, err := resource.MarshalJSON()
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal resource: %v", err)
-	}
+	resourceJSON, _ := resource.MarshalJSON()
 	var resourceData map[string]interface{}
-	if err := json.Unmarshal(resourceJSON, &resourceData); err != nil {
-		return false, fmt.Errorf("failed to unmarshal resource: %v", err)
-	}
+	_ = json.Unmarshal(resourceJSON, &resourceData)
 
 	// Create CEL environment with declarations for our types
-	env, err := cel.NewEnv(
-		cel.Variable("resource", cel.AnyType),
-		cel.Variable("pod", cel.AnyType),
+	env, _ := cel.NewEnv(
+		cel.Variable("resource", cel.DynType),
+		cel.Variable("pod", cel.DynType),
 	)
-	if err != nil {
-		return false, fmt.Errorf("failed to create CEL environment: %v", err)
-	}
 
 	// Parse and check the expression first
 	parsed, issues := env.Parse(expression.(string))
 	if issues.Err() != nil {
 		return false, fmt.Errorf("failed to parse expression: %v", issues.Err())
 	}
-
-	checked, issues := env.Check(parsed)
-	if issues.Err() != nil {
-		return false, fmt.Errorf("failed to type-check expression: %v", issues.Err())
-	}
+	checked, _ := env.Check(parsed)
 
 	// Create program from checked expression
-	prg, err := env.Program(checked)
-	if err != nil {
-		return false, fmt.Errorf("failed to create program: %v", err)
-	}
+	prg, _ := env.Program(checked)
 
 	// Evaluate expression with both object and pod
 	out, _, err := prg.Eval(map[string]interface{}{
