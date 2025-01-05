@@ -129,7 +129,7 @@ func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, 
 	if expression == nil {
 		return r.evaluateResourceExists(ctx, pod, condition)
 	}
-	return r.evaluateExpression(ctx, pod, condition)
+	return r.evaluateExpression(ctx, pod, condition, expression)
 }
 
 // Example condition evaluators
@@ -148,7 +148,7 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.
 	return resource != nil, nil
 }
 
-func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
+func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}, expression interface{}) (bool, error) {
 	// Check if resource exists
 	resource, err := r.resourceLookup(ctx, pod, condition)
 
@@ -158,12 +158,6 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 		}
 
 		return false, err
-	}
-
-	// Get the expression from the condition
-	expr, ok := condition["expression"].(string)
-	if !ok {
-		return false, fmt.Errorf("expression not specified")
 	}
 
 	// Convert pod to JSON
@@ -196,7 +190,7 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 	}
 
 	// Parse and check the expression first
-	parsed, issues := env.Parse(expr)
+	parsed, issues := env.Parse(expression.(string))
 	if issues.Err() != nil {
 		return false, fmt.Errorf("failed to parse expression: %v", issues.Err())
 	}
