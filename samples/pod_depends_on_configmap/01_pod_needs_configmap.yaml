@@ -4,7 +4,7 @@ kind: Pod
 metadata:
   name: my-app
   annotations:
-    gateman.kdex.dev/configmap: |
+    k8s.ksgate.org/configmap: |
       {
         "apiVersion": "v1",
         "kind": "ConfigMap",
@@ -12,7 +12,7 @@ metadata:
       }
 spec:
   schedulingGates:
-  - name: gateman.kdex.dev/configmap
+  - name: k8s.ksgate.org/configmap
   containers:
   - name: nginx
     image: nginx

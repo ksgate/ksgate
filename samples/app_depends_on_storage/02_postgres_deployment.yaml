@@ -14,13 +14,13 @@ spec:
   template:
     metadata:
       annotations:
-        gateman.kdex.dev/postgres-config: |
+        k8s.ksgate.org/postgres-config: |
           {
             "apiVersion": "v1",
             "kind": "ConfigMap",
             "name": "postgres-config"
           }
-        gateman.kdex.dev/postgres-pv: |
+        k8s.ksgate.org/postgres-pv: |
           {
             "apiVersion": "v1",
             "kind": "PersistentVolume",
@@ -47,8 +47,8 @@ spec:
         - mountPath: /var/lib/postgresql/data
           name: postgres-storage
       schedulingGates:
-      - name: gateman.kdex.dev/postgres-config
-      - name: gateman.kdex.dev/postgres-pv
+      - name: k8s.ksgate.org/postgres-config
+      - name: k8s.ksgate.org/postgres-pv
       volumes:
       - name: postgres-storage
         persistentVolumeClaim:

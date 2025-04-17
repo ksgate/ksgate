@@ -331,13 +331,13 @@ var _ = Describe("Manager", Ordered, func() {
 					Name:      "gated-pod",
 					Namespace: testNamespace,
 					Annotations: map[string]string{
-						"gateman.kdex.dev/one": fmt.Sprintf(`{
+						"k8s.ksgate.org/one": fmt.Sprintf(`{
 							"apiVersion": "v1",
 							"kind": "Service",
 							"name": "test-svc",
 							"namespace": "%s"
 						}`, testNamespace),
-						"gateman.kdex.dev/two": fmt.Sprintf(`{
+						"k8s.ksgate.org/two": fmt.Sprintf(`{
 							"apiVersion": "v1",
 							"kind": "ConfigMap",
 							"name": "test-cm",
@@ -347,8 +347,8 @@ var _ = Describe("Manager", Ordered, func() {
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/one"},
-						{Name: "gateman.kdex.dev/two"},
+						{Name: "k8s.ksgate.org/one"},
+						{Name: "k8s.ksgate.org/two"},
 					},
 					Containers: []corev1.Container{{
 						Name:  "nginx",
@@ -398,9 +398,9 @@ var _ = Describe("Manager", Ordered, func() {
 					"-o", "jsonpath={.spec.schedulingGates[*].name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(ContainSubstring("gateman.kdex.dev/one"),
+				g.Expect(output).NotTo(ContainSubstring("k8s.ksgate.org/one"),
 					"First gate should be removed")
-				g.Expect(output).To(ContainSubstring("gateman.kdex.dev/two"),
+				g.Expect(output).To(ContainSubstring("k8s.ksgate.org/two"),
 					"Second gate should still exist")
 			}, "1m", "5s").Should(Succeed())
 

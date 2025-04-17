@@ -20,7 +20,7 @@ metadata:
   name: my-app
   annotations:
     # Ready deployment
-    gateman.kdex.dev/database-deployment: |
+    k8s.ksgate.org/database-deployment: |
       {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -28,7 +28,7 @@ metadata:
         "expression": "resource.status.updatedReplicas >= 1"
       }
     # Existing service
-    gateman.kdex.dev/database-service: |
+    k8s.ksgate.org/database-service: |
       {
         "apiVersion": "v1",
         "kind": "Service",
@@ -42,8 +42,8 @@ spec:
     - name: DATABASE_HOST
       value: database
   schedulingGates:
-  - name: gateman.kdex.dev/database-deployment
-  - name: gateman.kdex.dev/database-service
+  - name: k8s.ksgate.org/database-deployment
+  - name: k8s.ksgate.org/database-service
 ```
 
 This pod will not be scheduled until the `database` deployment has at least 1 updated replica and the `database` service is present.
@@ -65,7 +65,7 @@ This is where Gateman comes in. It automates the process of evaluating condition
 ## Documentation
 
 ### Gates
-Gates must be prefixed with `gateman.kdex.dev/` to be recognized by Gateman. The suffix is used to identify individual gates and is arbitrary.
+Gates must be prefixed with `k8s.ksgate.org/` to be recognized by Gateman. The suffix is used to identify individual gates and is arbitrary.
 
 ### Annotations
 An annotation by the same name is used to hold the condition which is JSON Object that conforms to the [condition schema](condition.schema.json).

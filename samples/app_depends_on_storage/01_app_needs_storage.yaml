@@ -13,20 +13,20 @@ spec:
   template:
     metadata:
       annotations:
-        gateman.kdex.dev/postgres-config: |
+        k8s.ksgate.org/postgres-config: |
           {
             "apiVersion": "v1",
             "kind": "ConfigMap",
             "name": "postgres-config"
           }
-        gateman.kdex.dev/postgres-deployment: |
+        k8s.ksgate.org/postgres-deployment: |
           {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "name": "postgres",
             "expression": "resource.status.readyReplicas >= 1"
           }
-        gateman.kdex.dev/postgres-service: |
+        k8s.ksgate.org/postgres-service: |
           {
             "apiVersion": "v1",
             "kind": "Service",
@@ -36,9 +36,9 @@ spec:
         app: my-app
     spec:
       schedulingGates:
-      - name: gateman.kdex.dev/postgres-config
-      - name: gateman.kdex.dev/postgres-deployment
-      - name: gateman.kdex.dev/postgres-service
+      - name: k8s.ksgate.org/postgres-config
+      - name: k8s.ksgate.org/postgres-deployment
+      - name: k8s.ksgate.org/postgres-service
       containers:
       - name: my-app
         image: bash:latest

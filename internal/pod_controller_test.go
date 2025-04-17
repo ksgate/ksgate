@@ -98,7 +98,7 @@ func TestPodController_Reconcile(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 					},
 				},
 				Status: corev1.PodStatus{
@@ -107,7 +107,7 @@ func TestPodController_Reconcile(t *testing.T) {
 			},
 			expectedError: false,
 			expectedGates: []corev1.PodSchedulingGate{
-				{Name: "gateman.kdex.dev/test-gate"},
+				{Name: "k8s.ksgate.org/test-gate"},
 			},
 		},
 		{
@@ -117,12 +117,12 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": "invalid-json",
+						"k8s.ksgate.org/test-gate": "invalid-json",
 					},
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 					},
 				},
 				Status: corev1.PodStatus{
@@ -131,7 +131,7 @@ func TestPodController_Reconcile(t *testing.T) {
 			},
 			expectedError: false,
 			expectedGates: []corev1.PodSchedulingGate{
-				{Name: "gateman.kdex.dev/test-gate"},
+				{Name: "k8s.ksgate.org/test-gate"},
 			},
 		},
 		{
@@ -141,7 +141,7 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -151,7 +151,7 @@ func TestPodController_Reconcile(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 					},
 				},
 				Status: corev1.PodStatus{
@@ -160,7 +160,7 @@ func TestPodController_Reconcile(t *testing.T) {
 			},
 			expectedError: false,
 			expectedGates: []corev1.PodSchedulingGate{
-				{Name: "gateman.kdex.dev/test-gate"},
+				{Name: "k8s.ksgate.org/test-gate"},
 			},
 		},
 		{
@@ -170,7 +170,7 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -180,7 +180,7 @@ func TestPodController_Reconcile(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 					},
 				},
 				Status: corev1.PodStatus{
@@ -198,7 +198,7 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -209,7 +209,7 @@ func TestPodController_Reconcile(t *testing.T) {
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
 						{Name: "other.domain/gate"},
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 						{Name: "another.domain/gate"},
 					},
 				},
@@ -231,7 +231,7 @@ func TestPodController_Reconcile(t *testing.T) {
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -241,7 +241,7 @@ func TestPodController_Reconcile(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{
 					SchedulingGates: []corev1.PodSchedulingGate{
-						{Name: "gateman.kdex.dev/test-gate"},
+						{Name: "k8s.ksgate.org/test-gate"},
 					},
 				},
 				Status: corev1.PodStatus{
@@ -250,7 +250,7 @@ func TestPodController_Reconcile(t *testing.T) {
 			},
 			expectedError: true,
 			expectedGates: []corev1.PodSchedulingGate{
-				{Name: "gateman.kdex.dev/test-gate"},
+				{Name: "k8s.ksgate.org/test-gate"},
 			},
 			interceptorFuncs: &interceptor.Funcs{
 				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
@@ -394,7 +394,7 @@ func TestPodController_evaluateGate(t *testing.T) {
 		{
 			name: "gate with no condition",
 			gate: corev1.PodSchedulingGate{
-				Name: "gateman.kdex.dev/test-gate",
+				Name: "k8s.ksgate.org/test-gate",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -407,14 +407,14 @@ func TestPodController_evaluateGate(t *testing.T) {
 		{
 			name: "gate with invalid condition JSON",
 			gate: corev1.PodSchedulingGate{
-				Name: "gateman.kdex.dev/test-gate",
+				Name: "k8s.ksgate.org/test-gate",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": "{invalid json",
+						"k8s.ksgate.org/test-gate": "{invalid json",
 					},
 				},
 			},
@@ -423,14 +423,14 @@ func TestPodController_evaluateGate(t *testing.T) {
 		{
 			name: "gate with valid condition that evaluates to false",
 			gate: corev1.PodSchedulingGate{
-				Name: "gateman.kdex.dev/test-gate",
+				Name: "k8s.ksgate.org/test-gate",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -444,14 +444,14 @@ func TestPodController_evaluateGate(t *testing.T) {
 		{
 			name: "gate with valid condition that evaluates to true",
 			gate: corev1.PodSchedulingGate{
-				Name: "gateman.kdex.dev/test-gate",
+				Name: "k8s.ksgate.org/test-gate",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -473,14 +473,14 @@ func TestPodController_evaluateGate(t *testing.T) {
 		{
 			name: "gate with valid condition on missing resource property",
 			gate: corev1.PodSchedulingGate{
-				Name: "gateman.kdex.dev/test-gate",
+				Name: "k8s.ksgate.org/test-gate",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
 					Namespace: "default",
 					Annotations: map[string]string{
-						"gateman.kdex.dev/test-gate": `{
+						"k8s.ksgate.org/test-gate": `{
 							"apiVersion":"v1",
 							"kind":"ConfigMap",
 							"name":"test",
@@ -973,7 +973,7 @@ func TestPodController_podToRequests(t *testing.T) {
 					Spec: corev1.PodSpec{
 						SchedulingGates: []corev1.PodSchedulingGate{
 							{
-								Name: "gateman.kdex.dev/foo",
+								Name: "k8s.ksgate.org/foo",
 							},
 						},
 					},

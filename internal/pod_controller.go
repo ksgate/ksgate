@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	GatePrefix = "gateman.kdex.dev/"
+	GatePrefix = "k8s.ksgate.org/"
 )
 
 // PodController reconciles Pod objects
@@ -61,7 +61,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("Processing gateman.kdex.dev pod scheduling gates",
+	logger.Info("Processing k8s.ksgate.org pod scheduling gates",
 		"pod", req.NamespacedName,
 		"gates", ourGates)
 
