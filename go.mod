@@ -1,4 +1,4 @@
-module github.com/kdex-tech/kdex-gateman
+module github.com/ksgate/kdex-gateman
 
 go 1.23.0
 

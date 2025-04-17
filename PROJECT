@@ -6,5 +6,5 @@ domain: my.domain
 layout:
 - go.kubebuilder.io/v4
 projectName: kdex-gateman
-repo: github.com/kdex-tech/kdex-gateman
+repo: github.com/ksgate/kdex-gateman
 version: "3"

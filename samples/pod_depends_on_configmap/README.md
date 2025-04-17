@@ -3,7 +3,7 @@
 Deploy the Gateman controller first.
 
 ```sh
-helm install gateman oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman --namespace gateman-system --create-namespace
+helm install gateman oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman --namespace gateman-system --create-namespace
 ```
 
 Deploy the pod that needs the configmap found in `01_pod_needs_configmap.yaml`.

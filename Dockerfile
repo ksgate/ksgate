@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 
-LABEL org.opencontainers.image.source=https://github.com/kdex-tech/kdex-gateman
+LABEL org.opencontainers.image.source=https://github.com/ksgate/kdex-gateman
 LABEL org.opencontainers.image.description="KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions."
 LABEL org.opencontainers.image.licenses=Apache-2.0
 

@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kdex-tech/kdex-gateman/test/utils"
+	"github.com/ksgate/kdex-gateman/test/utils"
 )
 
 var (

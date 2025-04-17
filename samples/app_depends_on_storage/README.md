@@ -3,7 +3,7 @@
 Deploy the Gateman controller first.
 
 ```sh
-helm install gateman oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman --namespace gateman-system --create-namespace
+helm install gateman oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman --namespace gateman-system --create-namespace
 ```
 
 Deploy the remaining resources in order. After each one notice the state of the pods.

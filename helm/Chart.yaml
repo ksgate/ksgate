@@ -1,6 +1,6 @@
 apiVersion: v2
 name: kdex-gateman
-description: A Helm chart for KDex Gateman (oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman)
+description: A Helm chart for KDex Gateman (oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman)
 
 # A chart can be either an 'application' or a 'library' chart.
 #

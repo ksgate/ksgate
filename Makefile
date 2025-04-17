@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG_NAME ?= ghcr.io/kdex-tech/kdex-gateman
+IMG_NAME ?= ghcr.io/ksgate/kdex-gateman
 IMG_VERSION ?= latest
 IMG ?= $(IMG_NAME):$(IMG_VERSION)
 
@@ -140,7 +140,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 		--build-arg GO_VERSION=$(GO_VERSION) \
 		--tag ${IMG} \
 		--tag ${IMG_NAME}:latest \
-		--annotation 'manifest:org.opencontainers.image.source=https://github.com/kdex-tech/kdex-gateman,\
+		--annotation 'manifest:org.opencontainers.image.source=https://github.com/ksgate/kdex-gateman,\
 manifest:org.opencontainers.image.description="KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.",\
 manifest:org.opencontainers.image.licenses=Apache-2.0' \
 		-f Dockerfile.cross .

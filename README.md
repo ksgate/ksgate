@@ -1,8 +1,8 @@
 # KDex Gateman
 
-[![CI](https://github.com/kdex-tech/kdex-gateman/actions/workflows/ci.yml/badge.svg)](https://github.com/kdex-tech/kdex-gateman/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/github/v/tag/kdex-tech/kdex-gateman?label=Docker)](https://github.com/kdex-tech/kdex-gateman/pkgs/container/kdex-gateman)
-[![Helm](https://img.shields.io/github/v/tag/kdex-tech/kdex-gateman?label=Helm)](https://github.com/kdex-tech/kdex-gateman/pkgs/container/kdex-gateman%2Fkdex-gateman)
+[![CI](https://github.com/ksgate/kdex-gateman/actions/workflows/ci.yml/badge.svg)](https://github.com/ksgate/kdex-gateman/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/github/v/tag/ksgate/kdex-gateman?label=Docker)](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman)
+[![Helm](https://img.shields.io/github/v/tag/ksgate/kdex-gateman?label=Helm)](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman%2Fkdex-gateman)
 
 KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
 
@@ -81,20 +81,20 @@ CEL expressions are a powerful feature that allow for complex filtering and vali
 
 ## Installation
 
-The Gateman controller image is available at [ghcr.io/kdex-tech/kdex-gateman](https://github.com/kdex-tech/kdex-gateman/pkgs/container/kdex-gateman).
+The Gateman controller image is available at [ghcr.io/ksgate/kdex-gateman](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman).
 
 However, I recommend using the Helm chart to install Gateman.
 
 ### Helm Chart
 
-The Helm chart is available as an OCI artifact at [oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman](oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman).
+The Helm chart is available as an OCI artifact at [oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman](oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman).
 
 I recommend placing the chart resources in a dedicated namespace since this is generally used as a cluster-wide controller.
 
 To install the chart, run:
 
 ```sh
-helm install gateman oci://ghcr.io/kdex-tech/kdex-gateman/kdex-gateman --version <version> --namespace gateman-system --create-namespace
+helm install gateman oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman --version <version> --namespace gateman-system --create-namespace
 ```
 
 ## License
