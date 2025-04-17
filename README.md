@@ -94,7 +94,7 @@ I recommend placing the chart resources in a dedicated namespace since this is g
 To install the chart, run:
 
 ```sh
-helm install gateman oci://ghcr.io/ksgate/ksgate/ksgate --version <version> --namespace gateman-system --create-namespace
+helm install ksgate oci://ghcr.io/ksgate/ksgate/ksgate --version <version> --namespace ksgate-system --create-namespace
 ```
 
 ## License

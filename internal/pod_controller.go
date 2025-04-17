@@ -245,7 +245,7 @@ func (r *PodController) resourceLookup(ctx context.Context, pod *corev1.Pod, con
 // SetupWithManager sets up the controller with the Manager
 func (r *PodController) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("gateman").
+		Named("ksgate").
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(r.podToRequests),

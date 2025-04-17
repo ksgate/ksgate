@@ -298,7 +298,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(func(g Gomega) {
 				metricsOutput := getMetricsOutput()
 				g.Expect(metricsOutput).To(ContainSubstring(
-					`controller_runtime_reconcile_total{controller="gateman",result="success"}`,
+					`controller_runtime_reconcile_total{controller="ksgate",result="success"}`,
 				))
 			}).Should(Succeed())
 		})
@@ -313,7 +313,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(func(g Gomega) {
 				metricsOutput := getMetricsOutput()
 				g.Expect(metricsOutput).To(ContainSubstring(
-					`controller_runtime_reconcile_total{controller="gateman",result="success"}`,
+					`controller_runtime_reconcile_total{controller="ksgate",result="success"}`,
 				))
 			}).Should(Succeed())
 		})
@@ -321,7 +321,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 	Context("Scheduling Gates", func() {
 		It("should handle pod scheduling gates correctly", func() {
-			By("creating a pod with gateman scheduling gates")
+			By("creating a pod with ksgate scheduling gates")
 			testPod := &corev1.Pod{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "v1",
