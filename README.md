@@ -1,10 +1,10 @@
-# KDex Gateman
+# Gateman
 
 [![CI](https://github.com/ksgate/ksgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ksgate/ksgate/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/github/v/tag/ksgate/ksgate?label=Docker)](https://github.com/ksgate/ksgate/pkgs/container/ksgate)
 [![Helm](https://img.shields.io/github/v/tag/ksgate/ksgate?label=Helm)](https://github.com/ksgate/ksgate/pkgs/container/ksgate%2Fksgate)
 
-KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
+Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
 
 ## Description
 Avoid wasting resources scheduling pods that are not ready to run due to unsatisfied dependencies.

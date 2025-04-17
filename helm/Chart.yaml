@@ -1,6 +1,6 @@
 apiVersion: v2
 name: ksgate
-description: A Helm chart for KDex Gateman (oci://ghcr.io/ksgate/ksgate/ksgate)
+description: A Helm chart for Gateman (oci://ghcr.io/ksgate/ksgate/ksgate)
 
 # A chart can be either an 'application' or a 'library' chart.
 #

@@ -141,7 +141,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 		--tag ${IMG} \
 		--tag ${IMG_NAME}:latest \
 		--annotation 'manifest:org.opencontainers.image.source=https://github.com/ksgate/ksgate,\
-manifest:org.opencontainers.image.description="KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.",\
+manifest:org.opencontainers.image.description="Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.",\
 manifest:org.opencontainers.image.licenses=Apache-2.0' \
 		-f Dockerfile.cross .
 	rm Dockerfile.cross
