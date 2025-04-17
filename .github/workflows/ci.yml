@@ -16,7 +16,7 @@ on:
 
 env:
   LC_ALL: en_US.UTF-8
-  PUBLISH: ${{ (github.repository == 'ksgate/kdex-gateman') && startsWith(github.ref, 'refs/tags/') && (github.event_name != 'pull_request') }}
+  PUBLISH: ${{ (github.repository == 'ksgate/ksgate') && startsWith(github.ref, 'refs/tags/') && (github.event_name != 'pull_request') }}
 
 defaults:
   run:

@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "kdex-gateman.fullname" . }}
+  name: {{ include "ksgate.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "kdex-gateman.labels" . | nindent 4 }}
+    {{- include "ksgate.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "kdex-gateman.selectorLabels" . | nindent 6 }}
+      {{- include "ksgate.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "kdex-gateman.labels" . | nindent 8 }}
+        {{- include "ksgate.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -75,7 +75,7 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: true
-      serviceAccountName: {{ include "kdex-gateman.serviceAccountName" . }}
+      serviceAccountName: {{ include "ksgate.serviceAccountName" . }}
       terminationGracePeriodSeconds: 10
       {{- with .Values.tolerations }}
       tolerations:

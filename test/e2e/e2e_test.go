@@ -28,23 +28,23 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/ksgate/kdex-gateman/test/utils"
+	"github.com/ksgate/ksgate/test/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // namespace where the project is deployed in
-const namespace = "kdex-gateman-system"
-const testNamespace = "kdex-gateman-test"
+const namespace = "ksgate-system"
+const testNamespace = "ksgate-test"
 
 // serviceAccountName created for the project
-const serviceAccountName = "kdex-gateman-controller-manager"
+const serviceAccountName = "ksgate-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "kdex-gateman-controller-manager-metrics-service"
+const metricsServiceName = "ksgate-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "kdex-gateman-metrics-binding"
+const metricsRoleBindingName = "ksgate-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -189,7 +189,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			// Then create the new binding
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=kdex-gateman-metrics-reader",
+				"--clusterrole=ksgate-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err = utils.Run(cmd)

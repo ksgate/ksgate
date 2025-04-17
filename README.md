@@ -1,8 +1,8 @@
 # KDex Gateman
 
-[![CI](https://github.com/ksgate/kdex-gateman/actions/workflows/ci.yml/badge.svg)](https://github.com/ksgate/kdex-gateman/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/github/v/tag/ksgate/kdex-gateman?label=Docker)](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman)
-[![Helm](https://img.shields.io/github/v/tag/ksgate/kdex-gateman?label=Helm)](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman%2Fkdex-gateman)
+[![CI](https://github.com/ksgate/ksgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ksgate/ksgate/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/github/v/tag/ksgate/ksgate?label=Docker)](https://github.com/ksgate/ksgate/pkgs/container/ksgate)
+[![Helm](https://img.shields.io/github/v/tag/ksgate/ksgate?label=Helm)](https://github.com/ksgate/ksgate/pkgs/container/ksgate%2Fksgate)
 
 KDex Gateman is a Kubernetes controller that manages the scheduling of pods using declarative gates and conditions.
 
@@ -81,20 +81,20 @@ CEL expressions are a powerful feature that allow for complex filtering and vali
 
 ## Installation
 
-The Gateman controller image is available at [ghcr.io/ksgate/kdex-gateman](https://github.com/ksgate/kdex-gateman/pkgs/container/kdex-gateman).
+The Gateman controller image is available at [ghcr.io/ksgate/ksgate](https://github.com/ksgate/ksgate/pkgs/container/ksgate).
 
 However, I recommend using the Helm chart to install Gateman.
 
 ### Helm Chart
 
-The Helm chart is available as an OCI artifact at [oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman](oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman).
+The Helm chart is available as an OCI artifact at [oci://ghcr.io/ksgate/ksgate/ksgate](oci://ghcr.io/ksgate/ksgate/ksgate).
 
 I recommend placing the chart resources in a dedicated namespace since this is generally used as a cluster-wide controller.
 
 To install the chart, run:
 
 ```sh
-helm install gateman oci://ghcr.io/ksgate/kdex-gateman/kdex-gateman --version <version> --namespace gateman-system --create-namespace
+helm install gateman oci://ghcr.io/ksgate/ksgate/ksgate --version <version> --namespace gateman-system --create-namespace
 ```
 
 ## License

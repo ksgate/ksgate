@@ -27,5 +27,5 @@ Raymond Augé (28):
   - add pod controller to main [b673457]
   - initial pod controller [3c4253f]
   - a sample [36ce3df]
-  - kubebuilder init --repo github.com/ksgate/kdex-gateman [a192fa0]
+  - kubebuilder init --repo github.com/ksgate/ksgate [a192fa0]
 
