@@ -8,7 +8,7 @@ runs:
   - name: Log in to registry with Docker
     shell: bash
     run: |
-      echo "${{ github.token }}" | docker login ghcr.io/${{ github.repository }} -u ${{ github.actor }} --password-stdin
+      echo "${{ github.token }}" | docker login ghcr.io/${{ github.repository_owner }} -u ${{ github.actor }} --password-stdin
 
   - name: Push image
     shell: bash
@@ -17,7 +17,7 @@ runs:
       echo GITHUB_REF=${{ github.ref }}
 
       # This is the image name
-      IMAGE_ID=ghcr.io/${{ github.repository }}
+      IMAGE_ID=ghcr.io/${{ github.repository_owner }}/ksgate
       IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
       echo IMAGE_ID=$IMAGE_ID
 

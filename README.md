@@ -87,14 +87,14 @@ However, I recommend using the Helm chart to install Gateman.
 
 ### Helm Chart
 
-The Helm chart is available as an OCI artifact at [oci://ghcr.io/ksgate/ksgate/ksgate](oci://ghcr.io/ksgate/ksgate/ksgate).
+The Helm chart is available as an OCI artifact at [oci://ghcr.io/ksgate/charts/ksgate](oci://ghcr.io/ksgate/charts/ksgate).
 
 I recommend placing the chart resources in a dedicated namespace since this is generally used as a cluster-wide controller.
 
 To install the chart, run:
 
 ```sh
-helm install ksgate oci://ghcr.io/ksgate/ksgate/ksgate --version <version> --namespace ksgate-system --create-namespace
+helm install ksgate oci://ghcr.io/ksgate/charts/ksgate --version <version> --namespace ksgate-system --create-namespace
 ```
 
 ## License

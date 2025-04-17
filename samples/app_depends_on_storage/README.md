@@ -3,7 +3,7 @@
 Deploy the Gateman controller first.
 
 ```sh
-helm install ksgate oci://ghcr.io/ksgate/ksgate/ksgate --namespace ksgate-system --create-namespace
+helm install ksgate oci://ghcr.io/ksgate/charts/ksgate --namespace ksgate-system --create-namespace
 ```
 
 Deploy the remaining resources in order. After each one notice the state of the pods.
