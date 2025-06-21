@@ -23,10 +23,10 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"github.com/ksgate/ksgate/internal"
-	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	controller "github.com/ksgate/ksgate/internal/controller"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -148,7 +148,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&internal.PodController{
+	if err = (&controller.PodController{
 		Client:  mgr.GetClient(),
 		Dynamic: dynamicClient,
 		Scheme:  mgr.GetScheme(),
