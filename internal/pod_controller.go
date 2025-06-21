@@ -12,9 +12,12 @@ import (
 	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -40,7 +43,9 @@ type GateWatcher struct {
 type PodController struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Logger *logr.Logger
+	Logger logr.Logger
+
+	Dynamic *dynamic.DynamicClient
 
 	// Goroutine management
 	gateWatchers map[string]*GateWatcher // key: namespace/name/gate-name
@@ -126,6 +131,8 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 // ensureGateWatchers starts watchers for all gates of a pod
 func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod, gates []corev1.PodSchedulingGate) {
+	logger := log.FromContext(ctx)
+
 	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 
 	r.watcherMutex.Lock()
@@ -151,7 +158,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 		// Get condition from annotation
 		annotationValue, exists := pod.Annotations[gate.Name]
 		if !exists {
-			log.FromContext(ctx).Info("No condition annotation found for gate",
+			logger.Info("No condition annotation found for gate",
 				"gate", gate.Name, "pod", podKey)
 			continue
 		}
@@ -159,7 +166,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 		// Parse condition
 		var condition map[string]interface{}
 		if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
-			log.FromContext(ctx).Info("Failed to parse gate condition",
+			logger.Info("Failed to parse gate condition",
 				"gate", gate.Name, "condition", annotationValue, "error", err.Error())
 			continue
 		}
@@ -179,6 +186,8 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 
 // startGateWatcher starts a new goroutine to watch a specific gate
 func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition map[string]interface{}) {
+	logger := log.FromContext(ctx)
+
 	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 	gateKey := fmt.Sprintf("%s/%s", podKey, gate.Name)
 
@@ -195,7 +204,7 @@ func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, g
 
 	r.gateWatchers[gateKey] = watcher
 
-	log.FromContext(ctx).Info("Starting gate watcher",
+	logger.Info("Starting gate watcher",
 		"gate", gate.Name, "pod", podKey)
 
 	go watcher.watch()
@@ -248,13 +257,26 @@ func (w *GateWatcher) watch() {
 		namespace = strings.Split(w.podKey, "/")[0]
 	}
 
-	// Create unstructured object for watching
-	obj := &unstructured.Unstructured{}
-	obj.SetAPIVersion(apiVersion)
-	obj.SetKind(kind)
+	// Parse API version properly
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		logger.Error(err, "Failed to parse API version", "apiVersion", apiVersion)
+		return
+	}
 
-	// Set up watcher
-	watcher, err := w.controller.Watch(w.ctx, obj, client.InNamespace(namespace), client.MatchingFields{"metadata.name": name})
+	resource := schema.GroupVersionResource{
+		Group:    gv.Group,
+		Version:  gv.Version,
+		Resource: kind,
+	}
+
+	// Set up watcher using the client directly
+	watcher, err := w.controller.Dynamic.Resource(resource).Namespace(namespace).Watch(
+		w.ctx, v1.ListOptions{
+			FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+		},
+	)
+
 	if err != nil {
 		logger.Error(err, "Failed to create watcher for resource",
 			"apiVersion", apiVersion, "kind", kind, "name", name, "namespace", namespace)
@@ -291,12 +313,14 @@ func (w *GateWatcher) watch() {
 
 // evaluateCondition evaluates the gate condition
 func (w *GateWatcher) evaluateCondition() bool {
+	logger := log.FromContext(w.ctx)
+
 	// Get current pod state
 	var pod corev1.Pod
 	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
 
 	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
-		log.FromContext(w.ctx).Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
+		logger.Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
 		return false
 	}
 
@@ -317,7 +341,7 @@ func (w *GateWatcher) evaluateCondition() bool {
 	// Evaluate condition using existing logic
 	satisfied, err := w.controller.evaluateCondition(w.ctx, &pod, w.condition)
 	if err != nil {
-		log.FromContext(w.ctx).Error(err, "Failed to evaluate gate condition",
+		logger.Error(err, "Failed to evaluate gate condition",
 			"gate", w.gateName, "pod", w.podKey)
 		return false
 	}
@@ -327,12 +351,14 @@ func (w *GateWatcher) evaluateCondition() bool {
 
 // removeGate removes the gate from the pod
 func (w *GateWatcher) removeGate() {
+	logger := log.FromContext(w.ctx)
+
 	// Get current pod state
 	var pod corev1.Pod
 	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
 
 	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
-		log.FromContext(w.ctx).Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
+		logger.Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
 		return
 	}
 
@@ -348,12 +374,12 @@ func (w *GateWatcher) removeGate() {
 
 	// Update the pod
 	if err := w.controller.Update(w.ctx, &pod); err != nil {
-		log.FromContext(w.ctx).Error(err, "Failed to update pod scheduling gates",
+		logger.Error(err, "Failed to update pod scheduling gates",
 			"gate", w.gateName, "pod", w.podKey)
 		return
 	}
 
-	log.FromContext(w.ctx).Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
+	logger.Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
 }
 
 // evaluateGate determines if a gate should be removed
