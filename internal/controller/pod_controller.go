@@ -28,7 +28,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		// Pod was deleted, clean up any watchers
-		r.cleanupPodWatchers(req.NamespacedName.String())
+		r.cleanupPodWatchers(req.String())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -43,7 +43,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Skip if no gates with our prefix
 	if len(ourGates) == 0 {
-		r.cleanupPodWatchers(req.NamespacedName.String())
+		r.cleanupPodWatchers(req.String())
 		return ctrl.Result{}, nil
 	}
 
