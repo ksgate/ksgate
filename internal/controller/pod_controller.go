@@ -38,13 +38,10 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Find our gates
 	ourGates := []corev1.PodSchedulingGate{}
-	otherGates := []corev1.PodSchedulingGate{}
 
 	for _, gate := range pod.Spec.SchedulingGates {
 		if strings.HasPrefix(gate.Name, GatePrefix) {
 			ourGates = append(ourGates, gate)
-		} else {
-			otherGates = append(otherGates, gate)
 		}
 	}
 
@@ -118,11 +115,21 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 	}
 
 	// Clean up watchers for gates that no longer exist
+	watchersToRemove := []*GateWatcher{}
 	for gateKey, watcher := range r.gateWatchers {
 		if strings.HasPrefix(gateKey, podKey+"/") && !managedGates[gateKey] {
-			watcher.cancel()
-			delete(r.gateWatchers, gateKey)
+			watchersToRemove = append(watchersToRemove, watcher)
 		}
+	}
+
+	// Stop watchers first (without mutex since we already hold it)
+	for _, watcher := range watchersToRemove {
+		r.stopWatcherOnly(watcher)
+	}
+
+	// Then remove them from the map
+	for _, watcher := range watchersToRemove {
+		delete(r.gateWatchers, watcher.gateKey())
 	}
 }
 
@@ -152,20 +159,6 @@ func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, g
 	go watcher.watch()
 }
 
-// stopGateWatcher stops a specific gate watcher
-func (r *PodController) stopGateWatcher(podKey, gateName string) {
-	gateKey := fmt.Sprintf("%s/%s", podKey, gateName)
-
-	r.watcherMutex.Lock()
-	defer r.watcherMutex.Unlock()
-
-	if watcher, exists := r.gateWatchers[gateKey]; exists {
-		watcher.cancel()
-		delete(r.gateWatchers, gateKey)
-		r.Logger.Info("Stopped gate watcher", "gate", gateName, "pod", podKey)
-	}
-}
-
 // cleanupPodWatchers stops all watchers for a pod
 func (r *PodController) cleanupPodWatchers(podKey string) {
 	r.watcherMutex.Lock()
@@ -177,6 +170,41 @@ func (r *PodController) cleanupPodWatchers(podKey string) {
 			delete(r.gateWatchers, gateKey)
 		}
 	}
+}
+
+// stopAndRemoveWatcher safely stops and removes a watcher from the controller's map
+func (r *PodController) stopAndRemoveWatcher(watcher *GateWatcher) {
+	r.watcherMutex.Lock()
+	defer r.watcherMutex.Unlock()
+
+	watcher.cancel()
+	delete(r.gateWatchers, watcher.gateKey())
+}
+
+// stopWatcherOnly stops a watcher without removing it from the map (for use when mutex is already held)
+func (r *PodController) stopWatcherOnly(watcher *GateWatcher) {
+	watcher.cancel()
+}
+
+// GetWatcherStats returns statistics about active watchers for monitoring
+func (r *PodController) GetWatcherStats() map[string]int {
+	r.watcherMutex.RLock()
+	defer r.watcherMutex.RUnlock()
+
+	stats := make(map[string]int)
+	for gateKey := range r.gateWatchers {
+		// Extract pod key from gate key (format: namespace/name/gate-name)
+		parts := strings.Split(gateKey, "/")
+		if len(parts) >= 2 {
+			podKey := fmt.Sprintf("%s/%s", parts[0], parts[1])
+			stats[podKey]++
+		}
+	}
+	return stats
+}
+
+func (w *GateWatcher) gateKey() string {
+	return fmt.Sprintf("%s/%s", w.podKey, w.gateName)
 }
 
 // watch is the main goroutine function that watches a gate condition
@@ -219,6 +247,8 @@ func (w *GateWatcher) watch() {
 		logger.Error(err, "Failed to create watcher for resource",
 			"apiVersion", condition.APIVersion, "kind", condition.Kind,
 			"name", condition.Name, "namespace", namespace)
+		// Ensure we clean up this watcher from the controller's map
+		w.controller.stopAndRemoveWatcher(w)
 		return
 	}
 	defer watcher.Stop()
@@ -245,6 +275,10 @@ func (w *GateWatcher) watch() {
 				logger.Info("Gate condition satisfied, removing gate",
 					"gate", w.gateName, "pod", w.podKey)
 				w.removeGate()
+
+				// Safely stop and remove this watcher
+				w.controller.stopAndRemoveWatcher(w)
+
 				return
 			}
 		}
@@ -261,6 +295,10 @@ func (w *GateWatcher) evaluateCondition() bool {
 
 	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
 		logger.Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
+		// If pod is not found, clean up this watcher
+		if apierrors.IsNotFound(err) {
+			w.controller.stopAndRemoveWatcher(w)
+		}
 		return false
 	}
 
