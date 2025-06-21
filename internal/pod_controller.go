@@ -29,10 +29,30 @@ const (
 	GatePrefix = "k8s.ksgate.org/"
 )
 
+// GateCondition represents a condition that must be satisfied for a pod to be scheduled.
+// This struct matches the condition.schema.json specification.
+type GateCondition struct {
+	// APIVersion is the API version of the resource.
+	APIVersion string `json:"apiVersion"`
+
+	// Kind is the Kind of the resource.
+	Kind string `json:"kind"`
+
+	// Name is the name of the resource.
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the resource. When omitted, the pod's namespace is used.
+	Namespace string `json:"namespace,omitempty"`
+
+	// Expression is a CEL expression that must evaluate to true.
+	// When omitted, the existence of the resource is used to satisfy the condition.
+	Expression string `json:"expression,omitempty"`
+}
+
 // GateWatcher represents a goroutine that watches a specific gate condition
 type GateWatcher struct {
 	cancel     context.CancelFunc
-	condition  map[string]interface{}
+	condition  *GateCondition
 	controller *PodController
 	ctx        context.Context
 	gateName   string
@@ -163,16 +183,23 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 			continue
 		}
 
-		// Parse condition
-		var condition map[string]interface{}
+		// Parse condition using the new struct
+		var condition GateCondition
 		if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
 			logger.Info("Failed to parse gate condition",
 				"gate", gate.Name, "condition", annotationValue, "error", err.Error())
 			continue
 		}
 
+		// Validate required fields
+		if condition.APIVersion == "" || condition.Kind == "" || condition.Name == "" {
+			logger.Info("Missing required fields in gate condition",
+				"gate", gate.Name, "pod", podKey, "condition", condition)
+			continue
+		}
+
 		// Start watcher
-		r.startGateWatcher(ctx, pod, gate, condition)
+		r.startGateWatcher(ctx, pod, gate, &condition)
 	}
 
 	// Clean up watchers for gates that no longer exist
@@ -185,7 +212,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 }
 
 // startGateWatcher starts a new goroutine to watch a specific gate
-func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition map[string]interface{}) {
+func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition *GateCondition) {
 	logger := log.FromContext(ctx)
 
 	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
@@ -241,51 +268,49 @@ func (r *PodController) cleanupPodWatchers(podKey string) {
 func (w *GateWatcher) watch() {
 	logger := log.FromContext(w.ctx)
 
-	// Extract resource information from condition
-	apiVersion, ok1 := w.condition["apiVersion"].(string)
-	kind, ok2 := w.condition["kind"].(string)
-	name, ok3 := w.condition["name"].(string)
-	namespace, ok4 := w.condition["namespace"].(string)
+	// Use the structured condition
+	condition := w.condition
 
-	if !ok1 || !ok2 || !ok3 {
-		logger.Error(fmt.Errorf("invalid condition format"), "Missing required fields in condition")
-		return
-	}
-
-	if !ok4 {
-		// Use pod namespace if not specified
+	// Determine namespace - use condition namespace if specified, otherwise pod namespace
+	namespace := condition.Namespace
+	if namespace == "" {
 		namespace = strings.Split(w.podKey, "/")[0]
 	}
 
 	// Parse API version properly
-	gv, err := schema.ParseGroupVersion(apiVersion)
+	gv, err := schema.ParseGroupVersion(condition.APIVersion)
 	if err != nil {
-		logger.Error(err, "Failed to parse API version", "apiVersion", apiVersion)
+		logger.Error(err, "Failed to parse API version", "apiVersion", condition.APIVersion)
 		return
 	}
+
+	// Convert kind to lowercase plural for resource name
+	resourceName := strings.ToLower(condition.Kind) + "s" // Simple pluralization
 
 	resource := schema.GroupVersionResource{
 		Group:    gv.Group,
 		Version:  gv.Version,
-		Resource: kind,
+		Resource: resourceName,
 	}
 
-	// Set up watcher using the client directly
+	// Set up watcher using dynamic client
 	watcher, err := w.controller.Dynamic.Resource(resource).Namespace(namespace).Watch(
 		w.ctx, v1.ListOptions{
-			FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+			FieldSelector: fmt.Sprintf("metadata.name=%s", condition.Name),
 		},
 	)
 
 	if err != nil {
 		logger.Error(err, "Failed to create watcher for resource",
-			"apiVersion", apiVersion, "kind", kind, "name", name, "namespace", namespace)
+			"apiVersion", condition.APIVersion, "kind", condition.Kind,
+			"name", condition.Name, "namespace", namespace)
 		return
 	}
 	defer watcher.Stop()
 
 	logger.Info("Watching resource for gate condition",
-		"gate", w.gateName, "pod", w.podKey, "resource", fmt.Sprintf("%s/%s/%s", apiVersion, kind, name))
+		"gate", w.gateName, "pod", w.podKey,
+		"resource", fmt.Sprintf("%s/%s/%s", condition.APIVersion, condition.Kind, condition.Name))
 
 	// Watch for events
 	for {
@@ -394,15 +419,21 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 		return false
 	}
 
-	// Parse the JSON condition
-	var condition map[string]interface{}
+	// Parse the JSON condition using the new struct
+	var condition GateCondition
 	if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
 		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
 		return false
 	}
 
+	// Validate required fields
+	if condition.APIVersion == "" || condition.Kind == "" || condition.Name == "" {
+		logger.Info("Missing required fields in gate condition", "gate", gate.Name, "condition", condition)
+		return false
+	}
+
 	// Evaluate the condition based on the JSON content
-	satisfied, err := r.evaluateCondition(ctx, pod, condition)
+	satisfied, err := r.evaluateCondition(ctx, pod, &condition)
 	if err != nil {
 		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
 		return false
@@ -411,19 +442,19 @@ func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate 
 	return satisfied
 }
 
-func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
+func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition *GateCondition) (bool, error) {
 	if condition == nil {
 		return false, fmt.Errorf("condition is required")
 	}
-	expression := condition["expression"]
-	if expression == nil {
+
+	if condition.Expression == "" {
 		return r.evaluateResourceExists(ctx, pod, condition)
 	}
-	return r.evaluateExpression(ctx, pod, condition, expression)
+	return r.evaluateExpression(ctx, pod, condition)
 }
 
 // Example condition evaluators
-func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (bool, error) {
+func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.Pod, condition *GateCondition) (bool, error) {
 	// Check if resource exists
 	resource, err := r.resourceLookup(ctx, pod, condition)
 
@@ -438,8 +469,8 @@ func (r *PodController) evaluateResourceExists(ctx context.Context, pod *corev1.
 	return resource != nil, nil
 }
 
-func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}, expression interface{}) (bool, error) {
-	if expression == nil {
+func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod, condition *GateCondition) (bool, error) {
+	if condition.Expression == "" {
 		return false, fmt.Errorf("expression is required")
 	}
 
@@ -471,7 +502,7 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 	)
 
 	// Parse and check the expression first
-	parsed, issues := env.Parse(expression.(string))
+	parsed, issues := env.Parse(condition.Expression)
 	if issues.Err() != nil {
 		return false, fmt.Errorf("failed to parse expression: %v", issues.Err())
 	}
@@ -497,29 +528,20 @@ func (r *PodController) evaluateExpression(ctx context.Context, pod *corev1.Pod,
 	return result, nil
 }
 
-func (r *PodController) resourceLookup(ctx context.Context, pod *corev1.Pod, condition map[string]interface{}) (*unstructured.Unstructured, error) {
-	// Extract required fields
-	// Create an unstructured object to query the resource
-	apiVersion, ok1 := condition["apiVersion"].(string)
-	kind, ok2 := condition["kind"].(string)
-	name, ok3 := condition["name"].(string)
-	namespace, ok4 := condition["namespace"].(string)
-
-	if !ok4 {
+func (r *PodController) resourceLookup(ctx context.Context, pod *corev1.Pod, condition *GateCondition) (*unstructured.Unstructured, error) {
+	// Determine namespace - use condition namespace if specified, otherwise pod namespace
+	namespace := condition.Namespace
+	if namespace == "" {
 		namespace = pod.Namespace
 	}
 
-	if !ok1 || !ok2 || !ok3 {
-		return nil, fmt.Errorf("missing required fields for resourceLookup")
-	}
-
 	obj := &unstructured.Unstructured{}
-	obj.SetAPIVersion(apiVersion)
-	obj.SetKind(kind)
+	obj.SetAPIVersion(condition.APIVersion)
+	obj.SetKind(condition.Kind)
 
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: namespace,
-		Name:      name,
+		Name:      condition.Name,
 	}, obj)
 
 	if err == nil {

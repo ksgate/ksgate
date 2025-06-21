@@ -83,7 +83,8 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 		exit 1; \
 	}
 	@kind create cluster -n $(KIND_CLUSTER) || true
-	go test ./test/e2e/ -v -ginkgo.v
+
+	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
 	@kind delete cluster -n $(KIND_CLUSTER) || true
 
 .PHONY: lint
