@@ -1,4 +1,4 @@
-package internal
+package controller
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -378,7 +379,7 @@ func TestPodController_SetupWithManager(t *testing.T) {
 	}
 }
 
-func TestPodController_evaluateCondition(t *testing.T) {
+func TestGateWatcher_evaluateCondition(t *testing.T) {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	scheme := runtime.NewScheme()
@@ -390,233 +391,224 @@ func TestPodController_evaluateCondition(t *testing.T) {
 			Name:      "test-pod",
 			Namespace: "default",
 		},
+		Spec: corev1.PodSpec{
+			SchedulingGates: []corev1.PodSchedulingGate{
+				{
+					Name: "k8s.ksgate.org/test-gate",
+				},
+			},
+		},
 	}
 
 	tests := []struct {
 		name           string
-		condition      GateCondition
-		objects        []runtime.Object
+		condition      *GateCondition
+		object         *unstructured.Unstructured
 		expectedResult bool
-		expectedError  bool
 	}{
 		{
-			name:           "missing condition",
-			condition:      GateCondition{},
-			expectedResult: false,
-			expectedError:  true,
-		},
-		{
-			name:           "resourceExists - missing required fields",
-			condition:      GateCondition{},
-			expectedResult: false,
-			expectedError:  true,
-		},
-		{
 			name: "resourceExists - valid fields",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test",
 				Namespace:  "default",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "expression - missing required fields",
-			condition: GateCondition{
+			condition: &GateCondition{
 				Expression: "this is not a valid expression",
 			},
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
 			expectedResult: false,
-			expectedError:  true,
 		},
 		{
 			name: "expression - invalid expression",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "invalid && syntax ||",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: false,
-			expectedError:  true,
 		},
 		{
 			name: "expression - simple true condition",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "true",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "expression - simple false condition",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "false",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "expression - complex boolean expression (true)",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "true && (true || false)",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "expression - complex boolean expression (false)",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "true && false",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "expression - with pod variables",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "pod.metadata.name == 'test-pod'",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "expression - with pod variables (false case)",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "pod.metadata.name == 'different-pod'",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: false,
-			expectedError:  false,
 		},
 		{
 			name: "expression - with complex pod variable access",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "pod.metadata.namespace == 'default' && pod.metadata.name == 'test-pod'",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 		{
 			name: "expression - with target resource fields",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
 				Expression: "resource.metadata.name == 'test-cm' && resource.metadata.namespace == 'default'",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cm",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
 					},
 				},
 			},
 			expectedResult: true,
-			expectedError:  false,
 		},
 	}
 
@@ -624,7 +616,7 @@ func TestPodController_evaluateCondition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithRuntimeObjects(tt.objects...).
+				WithRuntimeObjects(testPod).
 				Build()
 
 			r := &PodController{
@@ -632,20 +624,25 @@ func TestPodController_evaluateCondition(t *testing.T) {
 				Scheme: scheme,
 			}
 
-			result, err := r.evaluateCondition(context.Background(), testPod, &tt.condition)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+			w := &GateWatcher{
+				condition:    tt.condition,
+				controller:   r,
+				ctx:          context.Background(),
+				gateName:     "k8s.ksgate.org/test-gate",
+				namespace:    "default",
+				podKey:       "default/test-pod",
+				podNamespace: "default",
+				podName:      "test-pod",
 			}
+
+			result := w.evaluateCondition(tt.object)
 
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
 }
 
-func TestPodController_evaluateExpression(t *testing.T) {
+func TestGateWatcher_evaluateExpression(t *testing.T) {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	scheme := runtime.NewScheme()
@@ -657,47 +654,62 @@ func TestPodController_evaluateExpression(t *testing.T) {
 			Name:      "test-pod",
 			Namespace: "default",
 		},
+		Spec: corev1.PodSpec{
+			SchedulingGates: []corev1.PodSchedulingGate{
+				{
+					Name: "k8s.ksgate.org/test-gate",
+				},
+			},
+		},
 	}
 
 	tests := []struct {
 		name           string
-		condition      GateCondition
-		objects        []runtime.Object
+		condition      *GateCondition
+		object         *unstructured.Unstructured
 		expectedResult bool
 		expectedError  bool
 	}{
 		{
 			name:           "1 missing expression",
-			condition:      GateCondition{},
+			condition:      &GateCondition{},
 			expectedResult: false,
 			expectedError:  true,
 		},
 		{
-			name: "2 resource missing",
-			condition: GateCondition{
+			name: "expression - simple true condition",
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test",
 				Namespace:  "default",
 				Expression: "true",
 			},
-			expectedResult: false,
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
+			expectedResult: true,
 			expectedError:  false,
 		},
 		{
 			name: "3 expression does not evaluate to boolean",
-			condition: GateCondition{
+			condition: &GateCondition{
 				APIVersion: "v1",
 				Kind:       "ConfigMap",
 				Name:       "test",
 				Namespace:  "default",
 				Expression: "45",
 			},
-			objects: []runtime.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "default",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
 					},
 				},
 			},
@@ -709,7 +721,7 @@ func TestPodController_evaluateExpression(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithRuntimeObjects(tt.objects...).
+				WithRuntimeObjects(testPod).
 				Build()
 
 			r := &PodController{
@@ -717,7 +729,18 @@ func TestPodController_evaluateExpression(t *testing.T) {
 				Scheme: scheme,
 			}
 
-			result, err := r.evaluateExpression(context.Background(), testPod, &tt.condition)
+			w := &GateWatcher{
+				condition:    tt.condition,
+				controller:   r,
+				ctx:          context.Background(),
+				gateName:     "k8s.ksgate.org/test-gate",
+				namespace:    "default",
+				podKey:       "default/test-pod",
+				podNamespace: "default",
+				podName:      "test-pod",
+			}
+
+			result, err := w.evaluateExpression(tt.object, testPod)
 
 			if tt.expectedError {
 				assert.Error(t, err)

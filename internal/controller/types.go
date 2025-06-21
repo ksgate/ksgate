@@ -1,4 +1,4 @@
-package internal
+package controller
 
 import (
 	"context"
@@ -36,12 +36,16 @@ type GateCondition struct {
 
 // GateWatcher represents a goroutine that watches a specific gate condition
 type GateWatcher struct {
-	cancel     context.CancelFunc
-	condition  *GateCondition
-	controller *PodController
-	ctx        context.Context
-	gateName   string
-	podKey     string // format: namespace/name
+	cancel       context.CancelFunc
+	condition    *GateCondition
+	controller   *PodController
+	ctx          context.Context
+	logger       logr.Logger
+	namespace    string
+	gateName     string
+	podKey       string // format: namespace/name
+	podNamespace string
+	podName      string
 }
 
 // PodController reconciles Pod objects
