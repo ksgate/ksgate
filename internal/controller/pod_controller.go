@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
@@ -21,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// +kubebuilder:rbac:groups="*",resources=*,verbs=get
+// +kubebuilder:rbac:groups="*",resources=*,verbs=get;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=pods/status,verbs=get
 
@@ -61,39 +60,6 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Ensure gate watchers are running for this pod
 	r.ensureGateWatchers(ctx, &pod, ourGates)
-
-	// Process each of our gates (fallback to polling)
-	var removedGates []corev1.PodSchedulingGate
-	for _, gate := range ourGates {
-		if r.evaluateGate(ctx, &pod, gate) {
-			removedGates = append(removedGates, gate)
-			// Remove this gate by excluding it from otherGates
-			continue
-		}
-
-		// Keep gate by adding to otherGates
-		otherGates = append(otherGates, gate)
-	}
-
-	// Update pod if we removed any gates
-	if len(removedGates) > 0 {
-		pod.Spec.SchedulingGates = otherGates
-		if err := r.Update(ctx, &pod); err != nil {
-			logger.Error(err, "Failed to update pod scheduling gates")
-			return ctrl.Result{}, err
-		}
-		logger.Info("Updated pod scheduling gates", "pod", req.NamespacedName)
-
-		// Clean up watchers for removed gates
-		for _, gate := range removedGates {
-			r.stopGateWatcher(req.NamespacedName.String(), gate.Name)
-		}
-	}
-
-	// Fallback to polling if any gates remain (for backward compatibility)
-	if (len(ourGates) - len(removedGates)) > 0 {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	}
 
 	return ctrl.Result{}, nil
 }
@@ -354,41 +320,6 @@ func (w *GateWatcher) removeGate() {
 	}
 
 	logger.Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
-}
-
-// evaluateGate determines if a gate should be removed
-func (r *PodController) evaluateGate(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate) bool {
-	logger := log.FromContext(ctx)
-
-	// Look for annotation matching the gate name
-	annotationKey := gate.Name
-	annotationValue, exists := pod.Annotations[annotationKey]
-	if !exists {
-		logger.Info("No condition annotation found matching gate name. This is an incorrect usage of the gate.", "gate", gate.Name, "pod", pod.Name, "namespace", pod.Namespace)
-		return false
-	}
-
-	// Parse the JSON condition using the new struct
-	var condition GateCondition
-	if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
-		logger.Info("Failed to parse gate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
-		return false
-	}
-
-	// Validate required fields
-	if condition.APIVersion == "" || condition.Kind == "" || condition.Name == "" {
-		logger.Info("Missing required fields in gate condition", "gate", gate.Name, "condition", condition)
-		return false
-	}
-
-	// Evaluate the condition based on the JSON content
-	satisfied, err := r.evaluateCondition(ctx, pod, &condition)
-	if err != nil {
-		logger.Info("Failed to evaluate condition", "gate", gate.Name, "condition", annotationValue, "message", err.Error())
-		return false
-	}
-
-	return satisfied
 }
 
 func (r *PodController) evaluateCondition(ctx context.Context, pod *corev1.Pod, condition *GateCondition) (bool, error) {
