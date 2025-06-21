@@ -1,4 +1,4 @@
-package controller
+package watcher
 
 import (
 	"context"
@@ -13,11 +13,21 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // startGateWatcher starts a new goroutine to watch a specific gate
-func NewGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition *GateCondition, controller *PodController) *GateWatcher {
+func NewGateWatcher(
+	ctx context.Context,
+	client client.Client,
+	dynamicClient *dynamic.DynamicClient,
+	remove func(*GateWatcher),
+	pod *corev1.Pod,
+	gate corev1.PodSchedulingGate,
+	condition *GateCondition,
+) *GateWatcher {
 	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 
 	watcherCtx, cancel := context.WithCancel(ctx)
@@ -29,9 +39,10 @@ func NewGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedul
 	}
 
 	watcher := &GateWatcher{
-		cancel:       cancel,
+		Cancel:       cancel,
+		Client:       client,
+		Dynamic:      dynamicClient,
 		condition:    condition,
-		controller:   controller,
 		ctx:          watcherCtx,
 		gateName:     gate.Name,
 		logger:       log.FromContext(watcherCtx),
@@ -39,9 +50,18 @@ func NewGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedul
 		podKey:       podKey,
 		podNamespace: pod.Namespace,
 		podName:      pod.Name,
+		remove:       remove,
 	}
 
 	return watcher
+}
+
+func (w *GateWatcher) GateKey() string {
+	return fmt.Sprintf("%s/%s", w.podKey, w.gateName)
+}
+
+func (w *GateWatcher) PodKey() string {
+	return w.podKey
 }
 
 func (w *GateWatcher) Start() {
@@ -60,11 +80,11 @@ func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) 
 
 	// Get current pod state
 	var pod corev1.Pod
-	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: w.podNamespace, Name: w.podName}, &pod); err != nil {
+	if err := w.Get(w.ctx, types.NamespacedName{Namespace: w.podNamespace, Name: w.podName}, &pod); err != nil {
 		w.logger.Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
 		// If pod is not found, clean up this watcher
 		if apierrors.IsNotFound(err) {
-			w.controller.stopAndRemoveWatcher(w)
+			w.remove(w)
 		}
 		return false
 	}
@@ -141,17 +161,13 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 	return result, nil
 }
 
-func (w *GateWatcher) gateKey() string {
-	return fmt.Sprintf("%s/%s", w.podKey, w.gateName)
-}
-
 // removeGate removes the gate from the pod
 func (w *GateWatcher) removeGate() {
 	// Get current pod state
 	var pod corev1.Pod
 	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
 
-	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
+	if err := w.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
 		w.logger.Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
 		return
 	}
@@ -167,7 +183,7 @@ func (w *GateWatcher) removeGate() {
 	pod.Spec.SchedulingGates = newGates
 
 	// Update the pod
-	if err := w.controller.Update(w.ctx, &pod); err != nil {
+	if err := w.Update(w.ctx, &pod); err != nil {
 		w.logger.Error(err, "Failed to update pod scheduling gates",
 			"gate", w.gateName, "pod", w.podKey)
 		return
@@ -195,7 +211,7 @@ func (w *GateWatcher) watch() {
 	}
 
 	// Set up watcher using dynamic client
-	watcher, err := w.controller.Dynamic.Resource(resource).Namespace(w.namespace).Watch(
+	watcher, err := w.Dynamic.Resource(resource).Namespace(w.namespace).Watch(
 		w.ctx, v1.ListOptions{
 			FieldSelector: fmt.Sprintf("metadata.name=%s", w.condition.Name),
 		},
@@ -206,7 +222,7 @@ func (w *GateWatcher) watch() {
 			"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind,
 			"name", w.condition.Name, "namespace", w.namespace)
 		// Ensure we clean up this watcher from the controller's map
-		w.controller.stopAndRemoveWatcher(w)
+		w.remove(w)
 		return
 	}
 	defer watcher.Stop()
@@ -237,7 +253,7 @@ func (w *GateWatcher) watch() {
 				w.removeGate()
 
 				// Safely stop and remove this watcher
-				w.controller.stopAndRemoveWatcher(w)
+				w.remove(w)
 
 				return
 			}

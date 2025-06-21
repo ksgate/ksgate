@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ksgate/ksgate/internal/watcher"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -67,7 +68,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 
 	// Initialize watchers map if needed
 	if r.gateWatchers == nil {
-		r.gateWatchers = make(map[string]*GateWatcher)
+		r.gateWatchers = make(map[string]*watcher.GateWatcher)
 	}
 
 	// Track which gates we're managing
@@ -91,7 +92,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 		}
 
 		// Parse condition using the new struct
-		var condition GateCondition
+		var condition watcher.GateCondition
 		if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
 			logger.Info("Failed to parse gate condition",
 				"gate", gate.Name, "condition", annotationValue, "error", err.Error())
@@ -110,7 +111,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 	}
 
 	// Clean up watchers for gates that no longer exist
-	watchersToRemove := []*GateWatcher{}
+	watchersToRemove := []*watcher.GateWatcher{}
 	for gateKey, watcher := range r.gateWatchers {
 		if strings.HasPrefix(gateKey, podKey+"/") && !managedGates[gateKey] {
 			watchersToRemove = append(watchersToRemove, watcher)
@@ -124,15 +125,16 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 
 	// Then remove them from the map
 	for _, watcher := range watchersToRemove {
-		delete(r.gateWatchers, watcher.gateKey())
+		delete(r.gateWatchers, watcher.GateKey())
 	}
 }
 
 // startGateWatcher starts a new goroutine to watch a specific gate
-func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition *GateCondition) {
-	watcher := NewGateWatcher(ctx, pod, gate, condition, r)
+func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition *watcher.GateCondition) {
+	watcher := watcher.NewGateWatcher(
+		ctx, r.Client, r.Dynamic, r.stopAndRemoveWatcher, pod, gate, condition)
 
-	r.gateWatchers[watcher.gateKey()] = watcher
+	r.gateWatchers[watcher.GateKey()] = watcher
 
 	watcher.Start()
 }
@@ -144,24 +146,24 @@ func (r *PodController) cleanupPodWatchers(podKey string) {
 
 	for gateKey, watcher := range r.gateWatchers {
 		if strings.HasPrefix(gateKey, podKey+"/") {
-			watcher.cancel()
+			watcher.Cancel()
 			delete(r.gateWatchers, gateKey)
 		}
 	}
 }
 
 // stopAndRemoveWatcher safely stops and removes a watcher from the controller's map
-func (r *PodController) stopAndRemoveWatcher(watcher *GateWatcher) {
+func (r *PodController) stopAndRemoveWatcher(watcher *watcher.GateWatcher) {
 	r.watcherMutex.Lock()
 	defer r.watcherMutex.Unlock()
 
-	watcher.cancel()
-	delete(r.gateWatchers, watcher.gateKey())
+	watcher.Cancel()
+	delete(r.gateWatchers, watcher.GateKey())
 }
 
 // stopWatcherOnly stops a watcher without removing it from the map (for use when mutex is already held)
-func (r *PodController) stopWatcherOnly(watcher *GateWatcher) {
-	watcher.cancel()
+func (r *PodController) stopWatcherOnly(watcher *watcher.GateWatcher) {
+	watcher.Cancel()
 }
 
 // GetWatcherStats returns statistics about active watchers for monitoring
@@ -171,7 +173,7 @@ func (r *PodController) GetWatcherStats() map[string]int {
 
 	stats := make(map[string]int)
 	for _, watcher := range r.gateWatchers {
-		stats[watcher.podKey]++
+		stats[watcher.PodKey()]++
 	}
 
 	return stats
