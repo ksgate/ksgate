@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,10 +26,25 @@ const (
 	GatePrefix = "k8s.ksgate.org/"
 )
 
+// GateWatcher represents a goroutine that watches a specific gate condition
+type GateWatcher struct {
+	cancel     context.CancelFunc
+	condition  map[string]interface{}
+	controller *PodController
+	ctx        context.Context
+	gateName   string
+	podKey     string // format: namespace/name
+}
+
 // PodController reconciles Pod objects
 type PodController struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Logger *logr.Logger
+
+	// Goroutine management
+	gateWatchers map[string]*GateWatcher // key: namespace/name/gate-name
+	watcherMutex sync.RWMutex
 }
 
 // +kubebuilder:rbac:groups="*",resources=*,verbs=get
@@ -41,6 +58,8 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// Get the Pod
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+		// Pod was deleted, clean up any watchers
+		r.cleanupPodWatchers(req.NamespacedName.String())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -58,6 +77,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Skip if no gates with our prefix
 	if len(ourGates) == 0 {
+		r.cleanupPodWatchers(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
 
@@ -65,7 +85,10 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		"pod", req.NamespacedName,
 		"gates", ourGates)
 
-	// Process each of our gates
+	// Ensure gate watchers are running for this pod
+	r.ensureGateWatchers(ctx, &pod, ourGates)
+
+	// Process each of our gates (fallback to polling)
 	var removedGates []corev1.PodSchedulingGate
 	for _, gate := range ourGates {
 		if r.evaluateGate(ctx, &pod, gate) {
@@ -86,13 +109,251 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return ctrl.Result{}, err
 		}
 		logger.Info("Updated pod scheduling gates", "pod", req.NamespacedName)
+
+		// Clean up watchers for removed gates
+		for _, gate := range removedGates {
+			r.stopGateWatcher(req.NamespacedName.String(), gate.Name)
+		}
 	}
 
+	// Fallback to polling if any gates remain (for backward compatibility)
 	if (len(ourGates) - len(removedGates)) > 0 {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// ensureGateWatchers starts watchers for all gates of a pod
+func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod, gates []corev1.PodSchedulingGate) {
+	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+
+	r.watcherMutex.Lock()
+	defer r.watcherMutex.Unlock()
+
+	// Initialize watchers map if needed
+	if r.gateWatchers == nil {
+		r.gateWatchers = make(map[string]*GateWatcher)
+	}
+
+	// Track which gates we're managing
+	managedGates := make(map[string]bool)
+
+	for _, gate := range gates {
+		gateKey := fmt.Sprintf("%s/%s", podKey, gate.Name)
+		managedGates[gateKey] = true
+
+		// Check if watcher already exists
+		if _, exists := r.gateWatchers[gateKey]; exists {
+			continue
+		}
+
+		// Get condition from annotation
+		annotationValue, exists := pod.Annotations[gate.Name]
+		if !exists {
+			log.FromContext(ctx).Info("No condition annotation found for gate",
+				"gate", gate.Name, "pod", podKey)
+			continue
+		}
+
+		// Parse condition
+		var condition map[string]interface{}
+		if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
+			log.FromContext(ctx).Info("Failed to parse gate condition",
+				"gate", gate.Name, "condition", annotationValue, "error", err.Error())
+			continue
+		}
+
+		// Start watcher
+		r.startGateWatcher(ctx, pod, gate, condition)
+	}
+
+	// Clean up watchers for gates that no longer exist
+	for gateKey, watcher := range r.gateWatchers {
+		if strings.HasPrefix(gateKey, podKey+"/") && !managedGates[gateKey] {
+			watcher.cancel()
+			delete(r.gateWatchers, gateKey)
+		}
+	}
+}
+
+// startGateWatcher starts a new goroutine to watch a specific gate
+func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition map[string]interface{}) {
+	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+	gateKey := fmt.Sprintf("%s/%s", podKey, gate.Name)
+
+	watcherCtx, cancel := context.WithCancel(ctx)
+
+	watcher := &GateWatcher{
+		podKey:     podKey,
+		gateName:   gate.Name,
+		condition:  condition,
+		ctx:        watcherCtx,
+		cancel:     cancel,
+		controller: r,
+	}
+
+	r.gateWatchers[gateKey] = watcher
+
+	log.FromContext(ctx).Info("Starting gate watcher",
+		"gate", gate.Name, "pod", podKey)
+
+	go watcher.watch()
+}
+
+// stopGateWatcher stops a specific gate watcher
+func (r *PodController) stopGateWatcher(podKey, gateName string) {
+	gateKey := fmt.Sprintf("%s/%s", podKey, gateName)
+
+	r.watcherMutex.Lock()
+	defer r.watcherMutex.Unlock()
+
+	if watcher, exists := r.gateWatchers[gateKey]; exists {
+		watcher.cancel()
+		delete(r.gateWatchers, gateKey)
+		r.Logger.Info("Stopped gate watcher", "gate", gateName, "pod", podKey)
+	}
+}
+
+// cleanupPodWatchers stops all watchers for a pod
+func (r *PodController) cleanupPodWatchers(podKey string) {
+	r.watcherMutex.Lock()
+	defer r.watcherMutex.Unlock()
+
+	for gateKey, watcher := range r.gateWatchers {
+		if strings.HasPrefix(gateKey, podKey+"/") {
+			watcher.cancel()
+			delete(r.gateWatchers, gateKey)
+		}
+	}
+}
+
+// watch is the main goroutine function that watches a gate condition
+func (w *GateWatcher) watch() {
+	logger := log.FromContext(w.ctx)
+
+	// Extract resource information from condition
+	apiVersion, ok1 := w.condition["apiVersion"].(string)
+	kind, ok2 := w.condition["kind"].(string)
+	name, ok3 := w.condition["name"].(string)
+	namespace, ok4 := w.condition["namespace"].(string)
+
+	if !ok1 || !ok2 || !ok3 {
+		logger.Error(fmt.Errorf("invalid condition format"), "Missing required fields in condition")
+		return
+	}
+
+	if !ok4 {
+		// Use pod namespace if not specified
+		namespace = strings.Split(w.podKey, "/")[0]
+	}
+
+	// Create unstructured object for watching
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion(apiVersion)
+	obj.SetKind(kind)
+
+	// Set up watcher
+	watcher, err := w.controller.Watch(w.ctx, obj, client.InNamespace(namespace), client.MatchingFields{"metadata.name": name})
+	if err != nil {
+		logger.Error(err, "Failed to create watcher for resource",
+			"apiVersion", apiVersion, "kind", kind, "name", name, "namespace", namespace)
+		return
+	}
+	defer watcher.Stop()
+
+	logger.Info("Watching resource for gate condition",
+		"gate", w.gateName, "pod", w.podKey, "resource", fmt.Sprintf("%s/%s/%s", apiVersion, kind, name))
+
+	// Watch for events
+	for {
+		select {
+		case <-w.ctx.Done():
+			logger.Info("Gate watcher context cancelled", "gate", w.gateName, "pod", w.podKey)
+			return
+		case event := <-watcher.ResultChan():
+			if event.Type == "ERROR" {
+				logger.Error(fmt.Errorf("watcher error"), "Error from resource watcher",
+					"gate", w.gateName, "pod", w.podKey)
+				continue
+			}
+
+			// Evaluate condition when resource changes
+			if satisfied := w.evaluateCondition(); satisfied {
+				logger.Info("Gate condition satisfied, removing gate",
+					"gate", w.gateName, "pod", w.podKey)
+				w.removeGate()
+				return
+			}
+		}
+	}
+}
+
+// evaluateCondition evaluates the gate condition
+func (w *GateWatcher) evaluateCondition() bool {
+	// Get current pod state
+	var pod corev1.Pod
+	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
+
+	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
+		log.FromContext(w.ctx).Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
+		return false
+	}
+
+	// Check if gate still exists
+	gateExists := false
+	for _, gate := range pod.Spec.SchedulingGates {
+		if gate.Name == w.gateName {
+			gateExists = true
+			break
+		}
+	}
+
+	if !gateExists {
+		// Gate was already removed, stop watching
+		return true
+	}
+
+	// Evaluate condition using existing logic
+	satisfied, err := w.controller.evaluateCondition(w.ctx, &pod, w.condition)
+	if err != nil {
+		log.FromContext(w.ctx).Error(err, "Failed to evaluate gate condition",
+			"gate", w.gateName, "pod", w.podKey)
+		return false
+	}
+
+	return satisfied
+}
+
+// removeGate removes the gate from the pod
+func (w *GateWatcher) removeGate() {
+	// Get current pod state
+	var pod corev1.Pod
+	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
+
+	if err := w.controller.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
+		log.FromContext(w.ctx).Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
+		return
+	}
+
+	// Remove the specific gate
+	var newGates []corev1.PodSchedulingGate
+	for _, gate := range pod.Spec.SchedulingGates {
+		if gate.Name != w.gateName {
+			newGates = append(newGates, gate)
+		}
+	}
+
+	pod.Spec.SchedulingGates = newGates
+
+	// Update the pod
+	if err := w.controller.Update(w.ctx, &pod); err != nil {
+		log.FromContext(w.ctx).Error(err, "Failed to update pod scheduling gates",
+			"gate", w.gateName, "pod", w.podKey)
+		return
+	}
+
+	log.FromContext(w.ctx).Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
 }
 
 // evaluateGate determines if a gate should be removed

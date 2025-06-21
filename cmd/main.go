@@ -144,6 +144,7 @@ func main() {
 	if err = (&internal.PodController{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Logger: mgr.GetLogger(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
