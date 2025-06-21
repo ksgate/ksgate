@@ -37,7 +37,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '~1.23.0'
+          go-version: '~1.24.0'
 
       - name: Run Tidy
         run: go mod tidy
@@ -45,7 +45,7 @@ jobs:
       - name: Run Linter
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61
+          version: v2.1.6
 
       - name: Run Unit Tests
         run: make test
