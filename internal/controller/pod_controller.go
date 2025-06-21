@@ -170,14 +170,10 @@ func (r *PodController) GetWatcherStats() map[string]int {
 	defer r.watcherMutex.RUnlock()
 
 	stats := make(map[string]int)
-	for gateKey := range r.gateWatchers {
-		// Extract pod key from gate key (format: namespace/name/gate-name)
-		parts := strings.Split(gateKey, "/")
-		if len(parts) >= 2 {
-			podKey := fmt.Sprintf("%s/%s", parts[0], parts[1])
-			stats[podKey]++
-		}
+	for _, watcher := range r.gateWatchers {
+		stats[watcher.podKey]++
 	}
+
 	return stats
 }
 
