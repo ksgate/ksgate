@@ -32,20 +32,39 @@ spec:
       containers:
       - name: postgres
         image: postgres:latest
-        envFrom:
-        - configMapRef:
-            name: postgres-config
+        env:
+        - name: PGDATA
+          valueFrom:
+            configMapKeyRef:
+              key: PGDATA
+              name: postgres-config
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              key: PGDATABASE
+              name: postgres-config
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              key: PGUSER
+              name: postgres-config
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+              key: PGPASSWORD
+              name: postgres-config
         livenessProbe:
           exec:
-            command: ["pg_isready", "-U", $(POSTGRES_USER)]
+            command: ["pg_isready"]
         readinessProbe:
           exec:
-            command: ["pg_isready", "-U", $(POSTGRES_USER)]
+            command: ["pg_isready"]
         ports:
         - containerPort: 5432
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: postgres-storage
+        resources: {}
       schedulingGates:
       - name: k8s.ksgate.org/postgres-config
       - name: k8s.ksgate.org/postgres-pv

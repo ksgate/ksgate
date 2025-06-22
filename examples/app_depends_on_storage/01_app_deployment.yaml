@@ -41,9 +41,9 @@ spec:
       - name: k8s.ksgate.org/postgres-service
       containers:
       - name: my-app
-        image: bash:latest
+        image: alpine/psql:latest
         command:
-        - /usr/local/bin/bash
+        - sh
         - -c
         - |
           cleanup()
@@ -52,16 +52,13 @@ spec:
             exit 0
           }
           trap cleanup SIGTERM SIGINT
-          apk --no-cache add postgresql17-client
-          export PGPASSWORD=$(POSTGRES_PASSWORD)
-          export PGHOST=postgres
-          export PGPORT=5432
           while true; do
             date +%s
-            psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) -c "SELECT 1 as SUCCESS"
+            psql -c "SELECT 1 as SUCCESS"
             sleep 5
           done
         envFrom:
         - configMapRef:
             name: postgres-config
+        resources: {}
 

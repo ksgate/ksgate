@@ -5,7 +5,9 @@ metadata:
   labels:
     app: postgres
 data:
-  POSTGRES_DB: postgres
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGUSER: postgres
+  PGDATABASE: postgres
+  PGPASSWORD: postgres
   PGDATA: /var/lib/postgresql/data
