@@ -4,4 +4,5 @@ kind: ConfigMap
 metadata:
   name: my-configmap
 data:
-  my-key: the value
+  index.html: |
+    <h1>Hello World!</h1>

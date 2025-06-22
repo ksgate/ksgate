@@ -6,7 +6,6 @@ metadata:
   annotations:
     k8s.ksgate.org/configmap: |
       {
-        "apiVersion": "v1",
         "kind": "ConfigMap",
         "name": "my-configmap"
       }
@@ -16,10 +15,13 @@ spec:
   containers:
   - name: nginx
     image: nginx
-    env:
-    - name: MY_CONFIGMAP
-      valueFrom:
-        configMapKeyRef:
-          name: my-configmap
-          key: my-key
+    resources: {}
+    volumeMounts:
+    - name: my-volume
+      mountPath: /usr/share/nginx/html/index.html
+      subPath: index.html
+  volumes:
+  - name: my-volume
+    configMap:
+      name: my-configmap
 
