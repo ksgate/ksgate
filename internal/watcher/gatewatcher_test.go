@@ -175,7 +175,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
-				Expression: "pod.metadata.name == 'test-pod'",
+				Expression: "this.metadata.name == 'test-pod'",
 			},
 			object: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -194,7 +194,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
-				Expression: "pod.metadata.name == 'different-pod'",
+				Expression: "this.metadata.name == 'different-pod'",
 			},
 			object: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -213,7 +213,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				Kind:       "ConfigMap",
 				Name:       "test-cm",
 				Namespace:  "default",
-				Expression: "pod.metadata.namespace == 'default' && pod.metadata.name == 'test-pod'",
+				Expression: "this.metadata.namespace == 'default' && this.metadata.name == 'test-pod'",
 			},
 			object: &unstructured.Unstructured{
 				Object: map[string]interface{}{

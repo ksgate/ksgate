@@ -144,7 +144,7 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 		),
 		cel.StdLib(),
 		cel.Variable("resource", cel.DynType),
-		cel.Variable("pod", cel.DynType),
+		cel.Variable("this", cel.DynType),
 	)
 
 	if err != nil {
@@ -164,7 +164,7 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 	// Evaluate expression with both object and pod
 	out, _, err := prg.Eval(map[string]interface{}{
 		"resource": resourceData,
-		"pod":      podData,
+		"this":     podData,
 	})
 	if err != nil {
 		return false, 0, fmt.Errorf("failed to evaluate expression: %v", err)
