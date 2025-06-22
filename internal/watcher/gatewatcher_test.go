@@ -2,7 +2,9 @@ package watcher
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -262,7 +264,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				podName:      "test-pod",
 			}
 
-			result := w.evaluateCondition(tt.object)
+			result, _ := w.evaluateCondition(tt.object)
 
 			assert.Equal(t, tt.expectedResult, result)
 		})
@@ -270,9 +272,6 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 }
 
 func TestGateWatcher_evaluateExpression(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = clientgoscheme.AddToScheme(scheme)
-
 	// Create a test pod
 	testPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -290,26 +289,20 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		condition      *GateCondition
+		expression     string
 		object         *unstructured.Unstructured
 		expectedResult bool
 		expectedError  bool
 	}{
 		{
 			name:           "1 missing expression",
-			condition:      &GateCondition{},
+			expression:     "",
 			expectedResult: false,
 			expectedError:  true,
 		},
 		{
-			name: "expression - simple true condition",
-			condition: &GateCondition{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "test",
-				Namespace:  "default",
-				Expression: "true",
-			},
+			name:       "expression - simple true condition",
+			expression: "true",
 			object: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -322,14 +315,8 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name: "3 expression does not evaluate to boolean",
-			condition: &GateCondition{
-				APIVersion: "v1",
-				Kind:       "ConfigMap",
-				Name:       "test",
-				Namespace:  "default",
-				Expression: "45",
-			},
+			name:       "3 expression does not evaluate to boolean",
+			expression: "45",
 			object: &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"metadata": map[string]interface{}{
@@ -341,26 +328,78 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 			expectedResult: false,
 			expectedError:  true,
 		},
+		{
+			name:       "time-based expression should return requeue duration",
+			expression: "now() > timestamp('2030-01-01T00:00:00Z')",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
+			expectedResult: false,
+			expectedError:  false,
+		},
+		{
+			name:       "time-based that succeeds",
+			expression: "now() < timestamp('2100-01-01T00:00:00Z')",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test",
+						"namespace": "default",
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name:       "time-based createFutureTimestamp",
+			expression: "now() < timestamp(resource.metadata.creationTimestamp)",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":              "test",
+						"namespace":         "default",
+						"creationTimestamp": createFutureTimestamp(1000000000),
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
+		{
+			name:       "time-based createPastTimestamp",
+			expression: "now() > timestamp(resource.metadata.creationTimestamp)",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":              "test",
+						"namespace":         "default",
+						"creationTimestamp": createPastTimestamp(1000000000),
+					},
+				},
+			},
+			expectedResult: true,
+			expectedError:  false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(testPod).
-				Build()
-
 			w := &GateWatcher{
-				Client:       client,
-				condition:    tt.condition,
-				ctx:          context.Background(),
-				gateName:     "k8s.ksgate.org/test-gate",
-				namespace:    "default",
-				podKey:       "default/test-pod",
-				podNamespace: "default",
-				podName:      "test-pod",
+				condition: &GateCondition{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       "test",
+					Namespace:  "default",
+					Expression: tt.expression,
+				},
 			}
 
-			result, err := w.evaluateExpression(tt.object, testPod)
+			result, requeueAfter, err := w.evaluateExpression(tt.object, testPod)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -369,6 +408,23 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedResult, result)
+
+			// Check if time-based expressions return a requeue duration
+			if strings.Contains(tt.expression, "now()") && !result {
+				assert.Greater(t, requeueAfter, time.Duration(0), "Time-based expressions should return requeue duration when false")
+			}
 		})
 	}
+}
+
+func createTimestampString(t time.Time) string {
+	return t.Format(time.RFC3339)
+}
+
+func createPastTimestamp(secondsAgo int) string {
+	return time.Now().Add(-time.Duration(secondsAgo) * time.Second).Format(time.RFC3339)
+}
+
+func createFutureTimestamp(secondsFromNow int) string {
+	return time.Now().Add(time.Duration(secondsFromNow) * time.Second).Format(time.RFC3339)
 }

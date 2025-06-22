@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/cel-go/cel"
+	celtypes "github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,10 +75,10 @@ func (w *GateWatcher) Start() {
 }
 
 // evaluateCondition evaluates the gate condition
-func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) bool {
+func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) (bool, time.Duration) {
 	if w.condition.Expression == "" {
 		// Existence check only
-		return true
+		return true, 0
 	}
 
 	// Get current pod state
@@ -86,7 +89,7 @@ func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) 
 		if apierrors.IsNotFound(err) {
 			w.remove(w)
 		}
-		return false
+		return false, 0
 	}
 
 	// Check if gate still exists
@@ -100,22 +103,22 @@ func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) 
 
 	if !gateExists {
 		// Gate was already removed, stop watching
-		return true
+		return true, 0
 	}
 
-	satisfied, err := w.evaluateExpression(eventObject, &pod)
+	satisfied, requeueAfter, err := w.evaluateExpression(eventObject, &pod)
 	if err != nil {
 		w.logger.Error(err, "Failed to evaluate gate condition",
 			"gate", w.gateName, "pod", w.podKey)
-		return false
+		return false, 0
 	}
 
-	return satisfied
+	return satisfied, requeueAfter
 }
 
-func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured, pod *corev1.Pod) (bool, error) {
+func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured, pod *corev1.Pod) (bool, time.Duration, error) {
 	if w.condition.Expression == "" {
-		return false, fmt.Errorf("expression is required")
+		return false, 0, fmt.Errorf("expression is required")
 	}
 
 	// Convert pod to JSON
@@ -129,15 +132,69 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 	_ = json.Unmarshal(resourceJSON, &resourceData)
 
 	// Create CEL environment with declarations for our types
-	env, _ := cel.NewEnv(
+	env, err := cel.NewEnv(
+		cel.Function("now",
+			cel.Overload("now",
+				[]*cel.Type{},
+				cel.TimestampType,
+				cel.FunctionBinding(func(args ...ref.Val) ref.Val {
+					return celtypes.Timestamp{Time: time.Now()}
+				}),
+			),
+		),
+		cel.StdLib(),
 		cel.Variable("resource", cel.DynType),
 		cel.Variable("pod", cel.DynType),
+		// cel.Function("timestamp",
+		// 	cel.Overload("timestamp_string",
+		// 		[]*cel.Type{cel.StringType},
+		// 		cel.TimestampType,
+		// 		cel.FunctionBinding(func(args ...ref.Val) ref.Val {
+		// 			if len(args) != 1 {
+		// 				return celtypes.NewErr("timestamp() requires exactly one argument")
+		// 			}
+		// 			str, ok := args[0].(celtypes.String)
+		// 			if !ok {
+		// 				return celtypes.NewErr("timestamp() argument must be a string")
+		// 			}
+		// 			t, err := time.Parse(time.RFC3339, string(str))
+		// 			if err != nil {
+		// 				return celtypes.NewErr("failed to parse timestamp: %v", err)
+		// 			}
+		// 			return celtypes.Timestamp{Time: t}
+		// 		}),
+		// 	),
+		// ),
+		// cel.Function("duration",
+		// 	cel.Overload("duration_string",
+		// 		[]*cel.Type{cel.StringType},
+		// 		cel.DurationType,
+		// 		cel.FunctionBinding(func(args ...ref.Val) ref.Val {
+		// 			if len(args) != 1 {
+		// 				return celtypes.NewErr("duration() requires exactly one argument")
+		// 			}
+		// 			str, ok := args[0].(celtypes.String)
+		// 			if !ok {
+		// 				return celtypes.NewErr("duration() argument must be a string")
+		// 			}
+		// 			d, err := time.ParseDuration(string(str))
+		// 			if err != nil {
+		// 				return celtypes.NewErr("failed to parse duration: %v", err)
+		// 			}
+		// 			return celtypes.Duration{Duration: d}
+		// 		}),
+		// 	),
+		// ),
 	)
+
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to create CEL environment: %v", err)
+	}
 
 	// Parse and check the expression first
 	parsed, issues := env.Parse(w.condition.Expression)
 	if issues.Err() != nil {
-		return false, fmt.Errorf("failed to parse expression: %v", issues.Err())
+		return false, 0, fmt.Errorf("failed to parse expression: %v", issues.Err())
 	}
 	checked, _ := env.Check(parsed)
 
@@ -150,15 +207,21 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 		"pod":      podData,
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to evaluate expression: %v", err)
+		return false, 0, fmt.Errorf("failed to evaluate expression: %v", err)
 	}
 
 	// Convert result to bool
 	result, ok := out.Value().(bool)
 	if !ok {
-		return false, fmt.Errorf("expression did not evaluate to boolean")
+		return false, 0, fmt.Errorf("expression did not evaluate to boolean")
 	}
-	return result, nil
+
+	var requeueAfter time.Duration
+	if !result && strings.Contains(w.condition.Expression, "now()") {
+		requeueAfter = 5 * time.Second
+	}
+
+	return result, requeueAfter, nil
 }
 
 // removeGate removes the gate from the pod
@@ -211,7 +274,7 @@ func (w *GateWatcher) watch() {
 	}
 
 	// Set up watcher using dynamic client
-	watcher, err := w.Dynamic.Resource(resource).Namespace(w.namespace).Watch(
+	k8sWatcher, err := w.Dynamic.Resource(resource).Namespace(w.namespace).Watch(
 		w.ctx, v1.ListOptions{
 			FieldSelector: fmt.Sprintf("metadata.name=%s", w.condition.Name),
 		},
@@ -225,37 +288,77 @@ func (w *GateWatcher) watch() {
 		w.remove(w)
 		return
 	}
-	defer watcher.Stop()
+	defer k8sWatcher.Stop()
 
 	w.logger.Info("Watching resource for gate condition",
 		"gate", w.gateName, "pod", w.podKey,
 		"resource", fmt.Sprintf("%s/%s/%s", w.condition.APIVersion, w.condition.Kind, w.condition.Name))
 
+	var timer *time.Timer
+	var timerCh <-chan time.Time
+	var lastKnownObject *unstructured.Unstructured
+
 	// Watch for events
 	for {
+		if timer != nil {
+			timerCh = timer.C
+		}
+
 		select {
 		case <-w.ctx.Done():
 			w.logger.Info("Gate watcher context cancelled", "gate", w.gateName, "pod", w.podKey)
+			if timer != nil {
+				timer.Stop()
+			}
 			return
-		case event := <-watcher.ResultChan():
+		case event, ok := <-k8sWatcher.ResultChan():
+			if !ok {
+				w.logger.Info("Watcher channel closed, terminating.")
+				return
+			}
+			if timer != nil {
+				timer.Stop()
+			}
 			if event.Type == "ERROR" {
 				w.logger.Error(fmt.Errorf("watcher error"), "Error from resource watcher",
 					"gate", w.gateName, "pod", w.podKey)
 				continue
 			}
 
-			eventObject := event.Object.(*unstructured.Unstructured)
+			lastKnownObject = event.Object.(*unstructured.Unstructured)
+			satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
 
-			// Evaluate condition when resource changes
-			if satisfied := w.evaluateCondition(eventObject); satisfied {
+			if satisfied {
 				w.logger.Info("Gate condition satisfied, removing gate",
 					"gate", w.gateName, "pod", w.podKey)
 				w.removeGate()
-
-				// Safely stop and remove this watcher
-				w.remove(w)
-
+				w.remove(w) // Self-destruct
 				return
+			}
+
+			if requeueAfter > 0 {
+				w.logger.Info("Condition not met, scheduling re-evaluation", "after", requeueAfter)
+				timer = time.NewTimer(requeueAfter)
+			}
+		case <-timerCh:
+			w.logger.Info("Timer fired, re-evaluating condition")
+			if lastKnownObject == nil {
+				w.logger.Info("Cannot re-evaluate, no resource object seen yet")
+				continue
+			}
+			satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
+
+			if satisfied {
+				w.logger.Info("Gate condition satisfied, removing gate",
+					"gate", w.gateName, "pod", w.podKey)
+				w.removeGate()
+				w.remove(w) // Self-destruct
+				return
+			}
+
+			if requeueAfter > 0 {
+				w.logger.Info("Condition not met, scheduling re-evaluation", "after", requeueAfter)
+				timer = time.NewTimer(requeueAfter)
 			}
 		}
 	}
