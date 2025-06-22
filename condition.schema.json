@@ -5,6 +5,7 @@
   "type": "object",
   "properties": {
     "apiVersion": {
+      "default": "v1",
       "description": "The API version of the resource.",
       "type": "string"
     },
@@ -20,13 +21,17 @@
       "description": "The namespace of the resource. When omitted, the pod's namespace is used.",
       "type": "string"
     },
+    "namespaced": {
+      "default": true,
+      "description": "If namespaced is false the resource is considered to be Cluster scoped.",
+      "type": "boolean"
+    },
     "expression": {
       "description": "A CEL expression that must evaluate to true. When omitted, the existence of the resource is used to satisfy the condition.",
       "type": "string"
     }
   },
   "required": [
-    "apiVersion",
     "kind",
     "name"
   ]

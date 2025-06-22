@@ -23,6 +23,9 @@ type GateCondition struct {
 	// Namespace is the namespace of the resource. When omitted, the pod's namespace is used.
 	Namespace string `json:"namespace,omitempty"`
 
+	// Namespaced indicates if the resource is namespaced. If false, the resource is considered to be Cluster scoped.
+	Namespaced bool `json:"namespaced,omitempty"`
+
 	// Expression is a CEL expression that must evaluate to true.
 	// When omitted, the existence of the resource is used to satisfy the condition.
 	Expression string `json:"expression,omitempty"`
@@ -32,7 +35,7 @@ type GateCondition struct {
 type GateWatcher struct {
 	client.Client
 	Cancel    context.CancelFunc
-	Dynamic   *dynamic.DynamicClient
+	Dynamic   dynamic.Interface
 	condition *GateCondition
 	// controller   *controller.PodController
 	ctx          context.Context

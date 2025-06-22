@@ -92,15 +92,22 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 		}
 
 		// Parse condition using the new struct
-		var condition watcher.GateCondition
+		condition := watcher.GateCondition{
+			APIVersion: "v1",
+			Namespaced: true,
+		}
 		if err := json.Unmarshal([]byte(annotationValue), &condition); err != nil {
 			logger.Info("Failed to parse gate condition",
 				"gate", gate.Name, "condition", annotationValue, "error", err.Error())
 			continue
 		}
 
+		if !condition.Namespaced {
+			condition.Namespace = ""
+		}
+
 		// Validate required fields
-		if condition.APIVersion == "" || condition.Kind == "" || condition.Name == "" {
+		if condition.Kind == "" || condition.Name == "" {
 			logger.Info("Missing required fields in gate condition",
 				"gate", gate.Name, "pod", podKey, "condition", condition)
 			continue

@@ -167,7 +167,15 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 		"this":     podData,
 	})
 	if err != nil {
-		return false, 0, fmt.Errorf("failed to evaluate expression: %v", err)
+		if strings.Contains(err.Error(), "no such key") {
+			w.logger.V(1).Info(
+				"Expression checked missing field, waiting for update",
+				"pod", podData, "resource", resourceData,
+				"expression", w.condition.Expression)
+			return false, 0, nil
+		} else {
+			return false, 0, fmt.Errorf("failed to evaluate expression: %v", err)
+		}
 	}
 
 	// Convert result to bool
@@ -233,17 +241,30 @@ func (w *GateWatcher) watch() {
 		Resource: resourceName,
 	}
 
+	var watchBuilder dynamic.ResourceInterface = w.Dynamic.Resource(resource)
+
+	if w.condition.Namespaced {
+		watchBuilder = watchBuilder.(dynamic.NamespaceableResourceInterface).Namespace(w.namespace)
+	}
+
 	// Set up watcher using dynamic client
-	k8sWatcher, err := w.Dynamic.Resource(resource).Namespace(w.namespace).Watch(
+	k8sWatcher, err := watchBuilder.Watch(
 		w.ctx, v1.ListOptions{
 			FieldSelector: fmt.Sprintf("metadata.name=%s", w.condition.Name),
 		},
 	)
 
 	if err != nil {
-		w.logger.Error(err, "Failed to create watcher for resource",
-			"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind,
-			"name", w.condition.Name, "namespace", w.namespace)
+		if w.condition.Namespaced {
+			w.logger.Error(err, "Failed to create namespaced watcher for resource",
+				"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind,
+				"name", w.condition.Name, "namespace", w.namespace)
+		} else {
+			w.logger.Error(err, "Failed to create cluster watcher for resource",
+				"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind,
+				"name", w.condition.Name)
+		}
+
 		// Ensure we clean up this watcher from the controller's map
 		w.remove(w)
 		return
@@ -286,6 +307,10 @@ func (w *GateWatcher) watch() {
 			}
 
 			lastKnownObject = event.Object.(*unstructured.Unstructured)
+
+			w.logger.Info("Checking gate condition",
+				"gate", w.gateName, "pod", w.podKey, "object", lastKnownObject, "condition", w.condition)
+
 			satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
 
 			if satisfied {

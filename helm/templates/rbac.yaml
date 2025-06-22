@@ -25,6 +25,7 @@ rules:
   resources: {{ toYaml .Values.conditionResources.resources | nindent 2 }}
   verbs:
   - get
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
