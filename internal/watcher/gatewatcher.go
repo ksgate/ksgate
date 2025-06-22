@@ -145,46 +145,6 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 		cel.StdLib(),
 		cel.Variable("resource", cel.DynType),
 		cel.Variable("pod", cel.DynType),
-		// cel.Function("timestamp",
-		// 	cel.Overload("timestamp_string",
-		// 		[]*cel.Type{cel.StringType},
-		// 		cel.TimestampType,
-		// 		cel.FunctionBinding(func(args ...ref.Val) ref.Val {
-		// 			if len(args) != 1 {
-		// 				return celtypes.NewErr("timestamp() requires exactly one argument")
-		// 			}
-		// 			str, ok := args[0].(celtypes.String)
-		// 			if !ok {
-		// 				return celtypes.NewErr("timestamp() argument must be a string")
-		// 			}
-		// 			t, err := time.Parse(time.RFC3339, string(str))
-		// 			if err != nil {
-		// 				return celtypes.NewErr("failed to parse timestamp: %v", err)
-		// 			}
-		// 			return celtypes.Timestamp{Time: t}
-		// 		}),
-		// 	),
-		// ),
-		// cel.Function("duration",
-		// 	cel.Overload("duration_string",
-		// 		[]*cel.Type{cel.StringType},
-		// 		cel.DurationType,
-		// 		cel.FunctionBinding(func(args ...ref.Val) ref.Val {
-		// 			if len(args) != 1 {
-		// 				return celtypes.NewErr("duration() requires exactly one argument")
-		// 			}
-		// 			str, ok := args[0].(celtypes.String)
-		// 			if !ok {
-		// 				return celtypes.NewErr("duration() argument must be a string")
-		// 			}
-		// 			d, err := time.ParseDuration(string(str))
-		// 			if err != nil {
-		// 				return celtypes.NewErr("failed to parse duration: %v", err)
-		// 			}
-		// 			return celtypes.Duration{Duration: d}
-		// 		}),
-		// 	),
-		// ),
 	)
 
 	if err != nil {
