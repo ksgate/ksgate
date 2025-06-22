@@ -193,14 +193,14 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 }
 
 // removeGate removes the gate from the pod
-func (w *GateWatcher) removeGate() {
+func (w *GateWatcher) removeGate() time.Duration {
 	// Get current pod state
 	var pod corev1.Pod
 	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
 
 	if err := w.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
 		w.logger.Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
-		return
+		return 0
 	}
 
 	// Remove the specific gate
@@ -215,12 +215,14 @@ func (w *GateWatcher) removeGate() {
 
 	// Update the pod
 	if err := w.Update(w.ctx, &pod); err != nil {
-		w.logger.Error(err, "Failed to update pod scheduling gates",
+		w.logger.Info("Failed to update pod scheduling gates, requeue and try again",
 			"gate", w.gateName, "pod", w.podKey)
-		return
+		return 5 * time.Second
 	}
 
 	w.logger.Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
+
+	return 0
 }
 
 // watch is the main goroutine function that watches a gate condition
@@ -316,9 +318,14 @@ func (w *GateWatcher) watch() {
 			if satisfied {
 				w.logger.Info("Gate condition satisfied, removing gate",
 					"gate", w.gateName, "pod", w.podKey)
-				w.removeGate()
-				w.remove(w) // Self-destruct
-				return
+
+				// If we get an error trying to update the pod, requeue
+				requeueAfter = w.removeGate()
+
+				if requeueAfter == 0 {
+					w.remove(w) // Self-destruct
+					return
+				}
 			}
 
 			if requeueAfter > 0 {

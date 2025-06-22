@@ -16,15 +16,14 @@ spec:
       annotations:
         k8s.ksgate.org/postgres-config: |
           {
-            "apiVersion": "v1",
             "kind": "ConfigMap",
             "name": "postgres-config"
           }
         k8s.ksgate.org/postgres-pv: |
           {
-            "apiVersion": "v1",
             "kind": "PersistentVolume",
-            "name": "postgres-pv"
+            "name": "postgres-pv",
+            "namespaced": false
           }
       labels:
         app: postgres
@@ -55,10 +54,10 @@ spec:
               name: postgres-config
         livenessProbe:
           exec:
-            command: ["pg_isready"]
+            command: ["sh",  "-c", "pg_isready -U ${POSTGRES_USER}"]
         readinessProbe:
           exec:
-            command: ["pg_isready"]
+            command: ["sh",  "-c", "pg_isready -U ${POSTGRES_USER}"]
         ports:
         - containerPort: 5432
         volumeMounts:
