@@ -187,14 +187,14 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 
 	var requeueAfter time.Duration
 	if !result && strings.Contains(w.condition.Expression, "now()") {
-		requeueAfter = 5 * time.Second
+		requeueAfter = 2 * time.Second
 	}
 
 	return result, requeueAfter, nil
 }
 
 func (w *GateWatcher) backoff() time.Duration {
-	delay := time.Second * 5 * (1 << w.requeueAttempts)
+	delay := time.Second * 2 * (1 << w.requeueAttempts)
 	const maxDelay = time.Minute * 5
 	if delay > maxDelay {
 		delay = maxDelay
