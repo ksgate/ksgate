@@ -417,9 +417,9 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 	}
 }
 
-func createTimestampString(t time.Time) string {
-	return t.Format(time.RFC3339)
-}
+// func createTimestampString(t time.Time) string {
+// 	return t.Format(time.RFC3339)
+// }
 
 func createPastTimestamp(secondsAgo int) string {
 	return time.Now().Add(-time.Duration(secondsAgo) * time.Second).Format(time.RFC3339)
