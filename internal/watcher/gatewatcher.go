@@ -42,18 +42,19 @@ func NewGateWatcher(
 	}
 
 	watcher := &GateWatcher{
-		Cancel:       cancel,
-		Client:       client,
-		Dynamic:      dynamicClient,
-		condition:    condition,
-		ctx:          watcherCtx,
-		gateName:     gate.Name,
-		logger:       log.FromContext(watcherCtx),
-		namespace:    namespace,
-		podKey:       podKey,
-		podNamespace: pod.Namespace,
-		podName:      pod.Name,
-		remove:       remove,
+		Cancel:          cancel,
+		Client:          client,
+		Dynamic:         dynamicClient,
+		condition:       condition,
+		ctx:             watcherCtx,
+		gateName:        gate.Name,
+		logger:          log.FromContext(watcherCtx),
+		namespace:       namespace,
+		podKey:          podKey,
+		podNamespace:    pod.Namespace,
+		podName:         pod.Name,
+		remove:          remove,
+		requeueAttempts: 0,
 	}
 
 	return watcher
@@ -85,9 +86,9 @@ func (w *GateWatcher) evaluateCondition(eventObject *unstructured.Unstructured) 
 	var pod corev1.Pod
 	if err := w.Get(w.ctx, types.NamespacedName{Namespace: w.podNamespace, Name: w.podName}, &pod); err != nil {
 		w.logger.Error(err, "Failed to get pod for condition evaluation", "pod", w.podKey)
-		// If pod is not found, clean up this watcher
+		// If pod is not found, the watcher can be cleaned up
 		if apierrors.IsNotFound(err) {
-			w.remove(w)
+			return true, 0
 		}
 		return false, 0
 	}
@@ -192,23 +193,45 @@ func (w *GateWatcher) evaluateExpression(eventObject *unstructured.Unstructured,
 	return result, requeueAfter, nil
 }
 
+func (w *GateWatcher) backoff() time.Duration {
+	delay := time.Second * 5 * (1 << w.requeueAttempts)
+	const maxDelay = time.Minute * 5
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	w.requeueAttempts++
+	return delay
+}
+
 // removeGate removes the gate from the pod
-func (w *GateWatcher) removeGate() time.Duration {
+func (w *GateWatcher) removeGate() error {
 	// Get current pod state
 	var pod corev1.Pod
 	podNamespace, podName := strings.Split(w.podKey, "/")[0], strings.Split(w.podKey, "/")[1]
 
 	if err := w.Get(w.ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, &pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			w.logger.Info("Pod not found, assuming it was deleted. Gate does not need to be removed.", "pod", w.podKey)
+			return nil
+		}
 		w.logger.Error(err, "Failed to get pod for gate removal", "pod", w.podKey)
-		return 0
+		return err
 	}
 
 	// Remove the specific gate
 	var newGates []corev1.PodSchedulingGate
+	found := false
 	for _, gate := range pod.Spec.SchedulingGates {
 		if gate.Name != w.gateName {
 			newGates = append(newGates, gate)
+		} else {
+			found = true
 		}
+	}
+
+	if !found {
+		w.logger.Info("Gate not present on pod, assuming already removed", "gate", w.gateName, "pod", w.podKey)
+		return nil
 	}
 
 	pod.Spec.SchedulingGates = newGates
@@ -217,12 +240,13 @@ func (w *GateWatcher) removeGate() time.Duration {
 	if err := w.Update(w.ctx, &pod); err != nil {
 		w.logger.Info("Failed to update pod scheduling gates, requeue and try again",
 			"gate", w.gateName, "pod", w.podKey)
-		return 5 * time.Second
+		return err
 	}
 
 	w.logger.Info("Successfully removed gate", "gate", w.gateName, "pod", w.podKey)
+	w.requeueAttempts = 0
 
-	return 0
+	return nil
 }
 
 // watch is the main goroutine function that watches a gate condition
@@ -281,6 +305,35 @@ func (w *GateWatcher) watch() {
 	var timerCh <-chan time.Time
 	var lastKnownObject *unstructured.Unstructured
 
+	evaluateAndAct := func() bool {
+		if lastKnownObject == nil {
+			w.logger.Info("Cannot evaluate, no resource object seen yet")
+			return false // Don't stop watcher
+		}
+
+		satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
+
+		if satisfied {
+			w.logger.Info("Gate condition satisfied, removing gate",
+				"gate", w.gateName, "pod", w.podKey)
+
+			if err := w.removeGate(); err != nil {
+				// Failed to remove gate, use exponential backoff
+				requeueAfter = w.backoff()
+				w.logger.Info("Failed to remove gate, scheduling re-evaluation", "after", requeueAfter)
+			} else {
+				w.remove(w) // Self-destruct
+				return true // Stop watcher
+			}
+		}
+
+		if requeueAfter > 0 {
+			w.logger.Info("Condition not met or failed, scheduling re-evaluation", "after", requeueAfter)
+			timer = time.NewTimer(requeueAfter)
+		}
+		return false // Don't stop watcher
+	}
+
 	// Watch for events
 	for {
 		if timer != nil {
@@ -309,48 +362,13 @@ func (w *GateWatcher) watch() {
 			}
 
 			lastKnownObject = event.Object.(*unstructured.Unstructured)
-
-			w.logger.Info("Checking gate condition",
-				"gate", w.gateName, "pod", w.podKey, "object", lastKnownObject, "condition", w.condition)
-
-			satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
-
-			if satisfied {
-				w.logger.Info("Gate condition satisfied, removing gate",
-					"gate", w.gateName, "pod", w.podKey)
-
-				// If we get an error trying to update the pod, requeue
-				requeueAfter = w.removeGate()
-
-				if requeueAfter == 0 {
-					w.remove(w) // Self-destruct
-					return
-				}
-			}
-
-			if requeueAfter > 0 {
-				w.logger.Info("Condition not met, scheduling re-evaluation", "after", requeueAfter)
-				timer = time.NewTimer(requeueAfter)
+			if stop := evaluateAndAct(); stop {
+				return
 			}
 		case <-timerCh:
 			w.logger.Info("Timer fired, re-evaluating condition")
-			if lastKnownObject == nil {
-				w.logger.Info("Cannot re-evaluate, no resource object seen yet")
-				continue
-			}
-			satisfied, requeueAfter := w.evaluateCondition(lastKnownObject)
-
-			if satisfied {
-				w.logger.Info("Gate condition satisfied, removing gate",
-					"gate", w.gateName, "pod", w.podKey)
-				w.removeGate()
-				w.remove(w) // Self-destruct
+			if stop := evaluateAndAct(); stop {
 				return
-			}
-
-			if requeueAfter > 0 {
-				w.logger.Info("Condition not met, scheduling re-evaluation", "after", requeueAfter)
-				timer = time.NewTimer(requeueAfter)
 			}
 		}
 	}

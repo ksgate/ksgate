@@ -46,4 +46,6 @@ type GateWatcher struct {
 	podName      string
 	podNamespace string
 	remove       func(*GateWatcher)
+	// requeueAttempts tracks the number of retries for failed operations
+	requeueAttempts int
 }
