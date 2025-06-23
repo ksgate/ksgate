@@ -16,16 +16,18 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// startGateWatcher starts a new goroutine to watch a specific gate
+// NewGateWatcher starts a new goroutine to watch a specific gate
 func NewGateWatcher(
 	ctx context.Context,
 	client client.Client,
 	dynamicClient *dynamic.DynamicClient,
+	discoveryClient discovery.DiscoveryInterface,
 	remove func(*GateWatcher),
 	pod *corev1.Pod,
 	gate corev1.PodSchedulingGate,
@@ -45,6 +47,7 @@ func NewGateWatcher(
 		Cancel:          cancel,
 		Client:          client,
 		Dynamic:         dynamicClient,
+		Discovery:       discoveryClient,
 		condition:       condition,
 		ctx:             watcherCtx,
 		gateName:        gate.Name,
@@ -249,17 +252,46 @@ func (w *GateWatcher) removeGate() error {
 	return nil
 }
 
+// getResourceName uses the discovery client to get the correct resource name
+func (w *GateWatcher) getResourceName() (string, error) {
+	// Use discovery client to get the correct resource name
+	resources, err := w.Discovery.ServerResourcesForGroupVersion(w.condition.APIVersion)
+	if err != nil {
+		// Fallback to simple pluralization if discovery fails
+		w.logger.V(1).Info("Discovery failed, using fallback pluralization",
+			"apiVersion", w.condition.APIVersion, "error", err)
+		return strings.ToLower(w.condition.Kind) + "s", nil
+	}
+
+	// Find the resource that matches our kind
+	for _, resource := range resources.APIResources {
+		if resource.Kind == w.condition.Kind {
+			return resource.Name, nil
+		}
+	}
+
+	// If not found, fallback to simple pluralization
+	w.logger.V(1).Info("Resource not found in discovery, using fallback pluralization",
+		"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind)
+	return strings.ToLower(w.condition.Kind) + "s", nil
+}
+
 // watch is the main goroutine function that watches a gate condition
 func (w *GateWatcher) watch() {
+	// Get the correct resource name
+	resourceName, err := w.getResourceName()
+	if err != nil {
+		w.logger.Error(err, "Failed to get resource name")
+		w.remove(w)
+		return
+	}
+
 	// Parse API version properly
 	gv, err := schema.ParseGroupVersion(w.condition.APIVersion)
 	if err != nil {
 		w.logger.Error(err, "Failed to parse API version", "apiVersion", w.condition.APIVersion)
 		return
 	}
-
-	// Convert kind to lowercase plural for resource name
-	resourceName := strings.ToLower(w.condition.Kind) + "s" // Simple pluralization
 
 	resource := schema.GroupVersionResource{
 		Group:    gv.Group,

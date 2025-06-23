@@ -14,8 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	discfake "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/dynamic"
-	dfake "k8s.io/client-go/dynamic/fake"
+	dynfake "k8s.io/client-go/dynamic/fake"
+	kfake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -538,6 +540,30 @@ func TestGateWatcher_watch(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "resource with odd resource plurality",
+			fields: fields{
+				condition: &GateCondition{
+					APIVersion: "networking.k8s.io/v1",
+					Kind:       "Ingress",
+					Name:       "test",
+					Namespace:  testPod.Namespace,
+					Namespaced: true,
+				},
+				podKey:       fmt.Sprintf("%s/%s", testPod.Namespace, testPod.Name),
+				podName:      testPod.Name,
+				podNamespace: testPod.Namespace,
+			},
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "networking.k8s.io/v1",
+					"kind":       "Ingress",
+					"metadata": map[string]interface{}{
+						"name": "test",
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -545,7 +571,14 @@ func TestGateWatcher_watch(t *testing.T) {
 				WithScheme(scheme).
 				WithRuntimeObjects(testPod).
 				Build()
-			var dc dynamic.Interface = dfake.NewSimpleDynamicClient(scheme, testPod)
+
+			clientset := kfake.NewSimpleClientset()
+			disc, ok := clientset.Discovery().(*discfake.FakeDiscovery)
+			if !ok {
+				t.Fatalf("couldn't convert Discovery() to *FakeDiscovery")
+			}
+
+			var dyn dynamic.Interface = dynfake.NewSimpleDynamicClient(scheme, testPod)
 			ctx := context.Background()
 			watcherCtx, cancel := context.WithCancel(ctx)
 			logger := ctrl.Log.WithName("test")
@@ -553,7 +586,8 @@ func TestGateWatcher_watch(t *testing.T) {
 			w := &GateWatcher{
 				Cancel:       cancel,
 				Client:       c,
-				Dynamic:      dc,
+				Discovery:    disc,
+				Dynamic:      dyn,
 				condition:    tt.fields.condition,
 				ctx:          watcherCtx,
 				gateName:     gateName,
@@ -568,12 +602,13 @@ func TestGateWatcher_watch(t *testing.T) {
 			go w.watch()
 
 			time.Sleep(500 * time.Millisecond)
+			resourceName, _ := w.getResourceName()
 
-			_, err := dc.Resource(
+			_, err := dyn.Resource(
 				schema.GroupVersionResource{
 					Group:    tt.object.GroupVersionKind().Group,
 					Version:  tt.object.GroupVersionKind().Version,
-					Resource: strings.ToLower(tt.object.GroupVersionKind().Kind) + "s",
+					Resource: resourceName,
 				},
 			).Namespace(tt.object.GetNamespace()).Create(ctx, tt.object, metav1.CreateOptions{})
 
@@ -598,14 +633,14 @@ func TestGateWatcher_watch(t *testing.T) {
 	}
 }
 
-// func createTimestampString(t time.Time) string {
-// 	return t.Format(time.RFC3339)
-// }
+func createTimestampString(t time.Time) string {
+	return t.Format(time.RFC3339)
+}
 
 func createPastTimestamp(secondsAgo int) string {
-	return time.Now().Add(-time.Duration(secondsAgo) * time.Second).Format(time.RFC3339)
+	return createTimestampString(time.Now().Add(-time.Duration(secondsAgo) * time.Second))
 }
 
 func createFutureTimestamp(secondsFromNow int) string {
-	return time.Now().Add(time.Duration(secondsFromNow) * time.Second).Format(time.RFC3339)
+	return createTimestampString(time.Now().Add(time.Duration(secondsFromNow) * time.Second))
 }

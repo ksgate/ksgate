@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -36,6 +37,7 @@ type GateWatcher struct {
 	client.Client
 	Cancel    context.CancelFunc
 	Dynamic   dynamic.Interface
+	Discovery discovery.DiscoveryInterface
 	condition *GateCondition
 	// controller   *controller.PodController
 	ctx          context.Context

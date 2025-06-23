@@ -139,7 +139,7 @@ func (r *PodController) ensureGateWatchers(ctx context.Context, pod *corev1.Pod,
 // startGateWatcher starts a new goroutine to watch a specific gate
 func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, gate corev1.PodSchedulingGate, condition *watcher.GateCondition) {
 	watcher := watcher.NewGateWatcher(
-		ctx, r.Client, r.Dynamic, r.stopAndRemoveWatcher, pod, gate, condition)
+		ctx, r.Client, r.Dynamic, r.Discovery, r.stopAndRemoveWatcher, pod, gate, condition)
 
 	r.gateWatchers[watcher.GateKey()] = watcher
 

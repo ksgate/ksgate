@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -148,11 +149,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create discovery client
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create discovery client")
+		os.Exit(1)
+	}
+
 	if err = (&controller.PodController{
-		Client:  mgr.GetClient(),
-		Dynamic: dynamicClient,
-		Scheme:  mgr.GetScheme(),
-		Logger:  mgr.GetLogger(),
+		Client:    mgr.GetClient(),
+		Discovery: discoveryClient,
+		Dynamic:   dynamicClient,
+		Logger:    mgr.GetLogger(),
+		Scheme:    mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
