@@ -1,0 +1,8 @@
+# Deploy this after the pod to see the pod scheduled
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
+data:
+  index.html: |
+    <h1>Hello World!</h1>

@@ -1,0 +1,40 @@
+# Deploy this first to see the pod gated from being schedule
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-app
+  annotations:
+    k8s.ksgate.org/configmap: |
+      {
+        "kind": "ConfigMap",
+        "name": "my-configmap",
+        "expression": "(now() - timestamp(resource.metadata.creationTimestamp)) > duration('2m')"
+      }
+    k8s.ksgate.org/ingress: |
+      {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "name": "my-app",
+        "expression": "has(resource.status.loadBalancer.ingress[0].ip)"
+      }
+  labels:
+    app: my-app
+spec:
+  schedulingGates:
+  - name: k8s.ksgate.org/configmap
+  - name: k8s.ksgate.org/ingress
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 80
+    resources: {}
+    volumeMounts:
+    - name: my-volume
+      mountPath: /usr/share/nginx/html/index.html
+      subPath: index.html
+  volumes:
+  - name: my-volume
+    configMap:
+      name: my-configmap
+
