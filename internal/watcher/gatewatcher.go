@@ -253,38 +253,33 @@ func (w *GateWatcher) removeGate() error {
 }
 
 // getResourceName uses the discovery client to get the correct resource name
-func (w *GateWatcher) getResourceName() (string, error) {
+func (w *GateWatcher) getResourceName() string {
 	// Use discovery client to get the correct resource name
 	resources, err := w.Discovery.ServerResourcesForGroupVersion(w.condition.APIVersion)
 	if err != nil {
 		// Fallback to simple pluralization if discovery fails
 		w.logger.V(1).Info("Discovery failed, using fallback pluralization",
 			"apiVersion", w.condition.APIVersion, "error", err)
-		return strings.ToLower(w.condition.Kind) + "s", nil
+		return strings.ToLower(w.condition.Kind) + "s"
 	}
 
 	// Find the resource that matches our kind
 	for _, resource := range resources.APIResources {
 		if resource.Kind == w.condition.Kind {
-			return resource.Name, nil
+			return resource.Name
 		}
 	}
 
 	// If not found, fallback to simple pluralization
 	w.logger.V(1).Info("Resource not found in discovery, using fallback pluralization",
 		"apiVersion", w.condition.APIVersion, "kind", w.condition.Kind)
-	return strings.ToLower(w.condition.Kind) + "s", nil
+	return strings.ToLower(w.condition.Kind) + "s"
 }
 
 // watch is the main goroutine function that watches a gate condition
 func (w *GateWatcher) watch() {
 	// Get the correct resource name
-	resourceName, err := w.getResourceName()
-	if err != nil {
-		w.logger.Error(err, "Failed to get resource name")
-		w.remove(w)
-		return
-	}
+	resourceName := w.getResourceName()
 
 	// Parse API version properly
 	gv, err := schema.ParseGroupVersion(w.condition.APIVersion)

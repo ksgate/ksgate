@@ -602,13 +602,12 @@ func TestGateWatcher_watch(t *testing.T) {
 			go w.watch()
 
 			time.Sleep(500 * time.Millisecond)
-			resourceName, _ := w.getResourceName()
 
 			_, err := dyn.Resource(
 				schema.GroupVersionResource{
 					Group:    tt.object.GroupVersionKind().Group,
 					Version:  tt.object.GroupVersionKind().Version,
-					Resource: resourceName,
+					Resource: w.getResourceName(),
 				},
 			).Namespace(tt.object.GetNamespace()).Create(ctx, tt.object, metav1.CreateOptions{})
 
