@@ -48,7 +48,7 @@ jobs:
           version: v2.1.6
 
       - name: Run Unit Tests
-        run: make test
+        run: make coverage
 
       - name: Running E2E Tests
         uses: ./.github/actions/e2e-tests
