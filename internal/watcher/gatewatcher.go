@@ -26,8 +26,8 @@ import (
 func NewGateWatcher(
 	ctx context.Context,
 	client client.Client,
-	dynamicClient *dynamic.DynamicClient,
-	discoveryClient discovery.DiscoveryInterface,
+	dynamic dynamic.Interface,
+	discovery discovery.DiscoveryInterface,
 	remove func(*GateWatcher),
 	pod *corev1.Pod,
 	gate corev1.PodSchedulingGate,
@@ -46,8 +46,8 @@ func NewGateWatcher(
 	watcher := &GateWatcher{
 		Cancel:          cancel,
 		Client:          client,
-		Dynamic:         dynamicClient,
-		Discovery:       discoveryClient,
+		Discovery:       discovery,
+		Dynamic:         dynamic,
 		condition:       condition,
 		ctx:             watcherCtx,
 		gateName:        gate.Name,

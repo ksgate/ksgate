@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	discfake "k8s.io/client-go/discovery/fake"
-	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -559,7 +558,8 @@ func TestGateWatcher_watch(t *testing.T) {
 					"apiVersion": "networking.k8s.io/v1",
 					"kind":       "Ingress",
 					"metadata": map[string]interface{}{
-						"name": "test",
+						"name":      "test",
+						"namespace": testPod.Namespace,
 					},
 				},
 			},
@@ -578,26 +578,33 @@ func TestGateWatcher_watch(t *testing.T) {
 				t.Fatalf("couldn't convert Discovery() to *FakeDiscovery")
 			}
 
-			var dyn dynamic.Interface = dynfake.NewSimpleDynamicClient(scheme, testPod)
-			ctx := context.Background()
-			watcherCtx, cancel := context.WithCancel(ctx)
-			logger := ctrl.Log.WithName("test")
-
-			w := &GateWatcher{
-				Cancel:       cancel,
-				Client:       c,
-				Discovery:    disc,
-				Dynamic:      dyn,
-				condition:    tt.fields.condition,
-				ctx:          watcherCtx,
-				gateName:     gateName,
-				logger:       logger,
-				namespace:    tt.object.GetNamespace(),
-				podKey:       tt.fields.podKey,
-				podName:      tt.fields.podName,
-				podNamespace: tt.fields.podNamespace,
-				remove:       func(gw *GateWatcher) {},
+			disc.Resources = []*metav1.APIResourceList{
+				{
+					GroupVersion: "networking.k8s.io/v1",
+					APIResources: []metav1.APIResource{
+						{
+							Name:         "ingresses",
+							Kind:         "Ingress",
+							Namespaced:   true,
+							SingularName: "ingress",
+						},
+					},
+				},
 			}
+
+			dyn := dynfake.NewSimpleDynamicClient(scheme, testPod)
+			ctx := context.Background()
+
+			w := NewGateWatcher(
+				ctx,
+				c,
+				dyn,
+				disc,
+				func(gw *GateWatcher) {},
+				testPod,
+				corev1.PodSchedulingGate{Name: gateName},
+				tt.fields.condition,
+			)
 
 			go w.watch()
 
