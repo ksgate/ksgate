@@ -28,7 +28,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		// Pod was deleted, clean up any watchers
-		r.cleanupPodWatchers(req.String())
+		r.cleanupGateWatchers(req.String())
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -43,7 +43,7 @@ func (r *PodController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// Skip if no gates with our prefix
 	if len(ourGates) == 0 {
-		r.cleanupPodWatchers(req.String())
+		r.cleanupGateWatchers(req.String())
 		return ctrl.Result{}, nil
 	}
 
@@ -146,8 +146,8 @@ func (r *PodController) startGateWatcher(ctx context.Context, pod *corev1.Pod, g
 	watcher.Start()
 }
 
-// cleanupPodWatchers stops all watchers for a pod
-func (r *PodController) cleanupPodWatchers(podKey string) {
+// cleanupGateWatchers stops all watchers for a pod
+func (r *PodController) cleanupGateWatchers(podKey string) {
 	r.watcherMutex.Lock()
 	defer r.watcherMutex.Unlock()
 
