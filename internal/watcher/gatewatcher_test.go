@@ -47,6 +47,8 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 		name           string
 		condition      *GateCondition
 		object         *unstructured.Unstructured
+		addPod         bool
+		removeGate     bool
 		expectedResult bool
 	}{
 		{
@@ -66,6 +68,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
 		},
 		{
 			name: "expression - missing required fields",
@@ -81,6 +84,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: false,
+			addPod:         true,
 		},
 		{
 			name: "expression - invalid expression",
@@ -100,6 +104,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: false,
+			addPod:         true,
 		},
 		{
 			name: "expression - simple true condition",
@@ -119,6 +124,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
 		},
 		{
 			name: "expression - simple false condition",
@@ -138,6 +144,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: false,
+			addPod:         true,
 		},
 		{
 			name: "expression - complex boolean expression (true)",
@@ -157,6 +164,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
 		},
 		{
 			name: "expression - complex boolean expression (false)",
@@ -176,6 +184,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: false,
+			addPod:         true,
 		},
 		{
 			name: "expression - with pod variables",
@@ -195,6 +204,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
 		},
 		{
 			name: "expression - with pod variables (false case)",
@@ -214,6 +224,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: false,
+			addPod:         true,
 		},
 		{
 			name: "expression - with complex pod variable access",
@@ -233,6 +244,7 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
 		},
 		{
 			name: "expression - with target resource fields",
@@ -252,14 +264,66 @@ func TestGateWatcher_evaluateCondition(t *testing.T) {
 				},
 			},
 			expectedResult: true,
+			addPod:         true,
+		},
+		{
+			name: "no pod exists",
+			condition: &GateCondition{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "test-cm",
+				Namespace:  "default",
+				Expression: "resource.metadata.name == 'test-cm' && resource.metadata.namespace == 'default'",
+			},
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
+					},
+				},
+			},
+			expectedResult: true,
+			addPod:         false,
+		},
+		{
+			name: "pod no longer has gate",
+			condition: &GateCondition{
+				APIVersion: "v1",
+				Kind:       "ConfigMap",
+				Name:       "test-cm",
+				Namespace:  "default",
+				Expression: "true",
+			},
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name":      "test-cm",
+						"namespace": "default",
+					},
+				},
+			},
+			addPod:         true,
+			removeGate:     true,
+			expectedResult: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			runtimeObjects := []runtime.Object{}
+
+			if tt.addPod {
+				podCopy := testPod.DeepCopy()
+				if tt.removeGate {
+					podCopy.Spec.SchedulingGates = []corev1.PodSchedulingGate{}
+				}
+				runtimeObjects = append(runtimeObjects, podCopy)
+			}
+
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithRuntimeObjects(testPod).
+				WithRuntimeObjects(runtimeObjects...).
 				Build()
 
 			// fake.NewSimpleDynamicClient(scheme)
@@ -428,7 +492,7 @@ func TestGateWatcher_evaluateExpression(t *testing.T) {
 	}
 }
 
-func TestGateWatcher_watch(t *testing.T) {
+func TestGateWatcher_Start(t *testing.T) {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
@@ -606,7 +670,7 @@ func TestGateWatcher_watch(t *testing.T) {
 				tt.fields.condition,
 			)
 
-			go w.watch()
+			w.Start()
 
 			time.Sleep(500 * time.Millisecond)
 
@@ -622,6 +686,9 @@ func TestGateWatcher_watch(t *testing.T) {
 				assert.Equal(t, tt.expectedError, err)
 				return
 			}
+
+			assert.Equal(t, fmt.Sprintf("%s/%s", tt.fields.podKey, gateName), w.GateKey())
+			assert.Equal(t, tt.fields.podKey, w.PodKey())
 
 			require.Eventually(
 				t, func() bool {
